@@ -13,5 +13,5 @@ secondaryBackgroundColor="#F0F8FF"
 # Cor do texto (escura)
 textColor="#333333"
 
-# Fonte
-font="sans-serif"
+[theme]
+font = "sans serif"
