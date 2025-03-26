@@ -20,9 +20,6 @@ import sys
 import platform
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from PIL import Image
-import requests
-from io import BytesIO
 
 # Importa as funções de conexão com banco de dados com tratamento de erro
 try:
@@ -49,14 +46,8 @@ DEFAULT_CREDENTIALS = {
     "password": "Viniciuschegou@1"
 }
 
-# Exibir a bandeira do México em vez do título
-try:
-    # Tenta carregar a bandeira do diretório local
-    st.image("bandeira_mexico.jpg", width=300)
-except:
-    # Fallback: exibe um título caso a imagem não seja encontrada
-    st.title("Automação de Novelties Dropi - México")
-
+# Título e descrição
+st.title("Automação de Novelties Dropi")
 st.markdown("""
 Este aplicativo automatiza o processamento de novelties na plataforma Dropi.
 A automação é executada diretamente e você pode acompanhar o progresso em tempo real.
@@ -176,7 +167,7 @@ st.sidebar.title("Configuração")
 if is_railway():
     use_headless = True
 else:
-    use_headless = st.sidebar.checkbox("Modo Headless", value=True, key="headless_checkbox",
+    use_headless = st.sidebar.checkbox("Modo Headless", value=True, 
                                 help="Se marcado, o navegador não será exibido na tela. Desmarque para depuração.")
 
 # Verificar dependências
@@ -242,7 +233,7 @@ with tab1:
     
     with col1:
         # Removido o formulário com credenciais
-        if st.button("Iniciar Automação Manual", key="btn_iniciar_manual"):
+        if st.button("Iniciar Automação Manual"):
             if st.session_state.is_running:
                 st.warning("Automação já está em execução.")
             elif not dependencies_ok:
@@ -282,7 +273,7 @@ with tab1:
             status = st.info("✅ Automação em execução...")
             
             # Botão para parar a automação
-            if st.button("Parar Automação", key="btn_parar_automacao"):
+            if st.button("Parar Automação"):
                 st.session_state.is_running = False
                 
                 # Fecha o navegador se estiver aberto
@@ -344,19 +335,20 @@ with tab1:
 with tab2:
     st.subheader("Configuração de Automação Automática")
     
+    # Carrega configurações de agendamento
+    schedule_config = load_schedule_config()
+    
     # Campo para ativar/desativar automação agendada
-    is_auto_enabled = st.toggle("Ativar Automação Automática", value=schedule_config["is_enabled"], key="toggle_auto_enabled")
+    is_auto_enabled = st.toggle("Ativar Automação Automática", value=schedule_config["is_enabled"], key="toggle_auto")
     
     # Configuração do intervalo de execução
     interval_hours = st.number_input("Intervalo de Execução (horas)", 
-                                     min_value=1, max_value=24, 
-                                     value=schedule_config["interval_hours"],
-                                     key="input_interval_hours")
-    
-    # Remover os campos de horário de início e fim conforme solicitado
+                                    min_value=1, max_value=24, 
+                                    value=schedule_config["interval_hours"],
+                                    key="interval_hours")
     
     # Salvar configurações
-    if st.button("Salvar Configurações de Agendamento", key="btn_salvar_agendamento"):
+    if st.button("Salvar Configurações de Agendamento", key="save_schedule"):
         new_config = {
             "is_enabled": is_auto_enabled,
             "interval_hours": interval_hours,
@@ -371,14 +363,14 @@ with tab2:
             for job in st.session_state.scheduler.get_jobs():
                 job.remove()
             
-            # Adiciona o novo job - sem verificação de horário de início/fim
+            # Adiciona o novo job
             st.session_state.scheduler.add_job(
-                run_scheduled_automation,  # Função modificada abaixo
+                lambda: st.session_state.update({"trigger_automation": True}),
                 IntervalTrigger(hours=interval_hours),
                 id='automation_job'
             )
             
-            st.success(f"✅ Automação agendada a cada {interval_hours} horas (24/7)")
+            st.success(f"✅ Automação agendada a cada {interval_hours} horas")
         else:
             # Remove todos os jobs
             for job in st.session_state.scheduler.get_jobs():
@@ -397,12 +389,12 @@ with tab3:
     # Filtro de data
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Data Inicial", value=datetime.date.today() - datetime.timedelta(days=7), key="date_start")
+        start_date = st.date_input("Data Inicial", value=datetime.date.today() - datetime.timedelta(days=7))
     with col2:
-        end_date = st.date_input("Data Final", value=datetime.date.today(), key="date_end")
+        end_date = st.date_input("Data Final", value=datetime.date.today())
     
     # Botão para carregar dados
-    if st.button("Carregar Histórico", key="btn_carregar_historico"):
+    if st.button("Carregar Histórico"):
         # Ajusta datas para incluir o dia inteiro
         start_datetime = datetime.datetime.combine(start_date, datetime.time.min)
         end_datetime = datetime.datetime.combine(end_date, datetime.time.max)
@@ -452,6 +444,321 @@ with tab3:
 # Rodapé
 st.markdown("---")
 st.caption("Automação Dropi Novelties © 2025")
+
+# Função main a ser chamada pelo iniciar.py
+def main():
+    # Título e descrição modificado para usar a bandeira do México
+    st.image("mexico_flag.png", width=300)
+    st.markdown("""
+    Este aplicativo automatiza o processamento de novelties na plataforma Dropi.
+    A automação é executada diretamente e você pode acompanhar o progresso em tempo real.
+    """)
+
+    # Inicializa o banco de dados
+    init_database()
+
+    # Inicializa o estado da sessão para armazenar logs
+    if 'log_output' not in st.session_state:
+        st.session_state.log_output = StringIO()
+    if 'is_running' not in st.session_state:
+        st.session_state.is_running = False
+    if 'progress' not in st.session_state:
+        st.session_state.progress = 0
+    if 'total_items' not in st.session_state:
+        st.session_state.total_items = 0
+    if 'processed_items' not in st.session_state:
+        st.session_state.processed_items = 0
+    if 'success_count' not in st.session_state:
+        st.session_state.success_count = 0
+    if 'failed_count' not in st.session_state:
+        st.session_state.failed_count = 0
+    if 'report' not in st.session_state:
+        st.session_state.report = None
+    if 'log_messages' not in st.session_state:
+        st.session_state.log_messages = []
+    if 'error_messages' not in st.session_state:
+        st.session_state.error_messages = []
+    if 'has_chromedriver' not in st.session_state:
+        st.session_state.has_chromedriver = is_railway()  # No Railway, assumimos que ChromeDriver está disponível
+    if 'automation_step' not in st.session_state:
+        st.session_state.automation_step = 'idle'
+    if 'driver' not in st.session_state:
+        st.session_state.driver = None
+    if 'current_row_index' not in st.session_state:
+        st.session_state.current_row_index = 0
+    if 'rows' not in st.session_state:
+        st.session_state.rows = []
+    if 'failed_items' not in st.session_state:
+        st.session_state.failed_items = []
+    if 'closed_tabs' not in st.session_state:
+        st.session_state.closed_tabs = 0
+    if 'found_pagination' not in st.session_state:
+        st.session_state.found_pagination = False
+    if 'start_time' not in st.session_state:
+        st.session_state.start_time = None
+    if 'scheduler' not in st.session_state:
+        st.session_state.scheduler = BackgroundScheduler()
+        st.session_state.scheduler.start()
+
+    # Verificar dependências
+    dependencies_ok = check_dependencies()
+
+    # Tentar instalar o ChromeDriver apenas se não estivermos no Railway
+    if dependencies_ok and not st.session_state.has_chromedriver and not is_railway():
+        with st.sidebar:
+            with st.spinner("Instalando ChromeDriver..."):
+                try:
+                    # Tenta instalar o ChromeDriver
+                    driver_path = ChromeDriverManager().install()
+                    st.session_state.has_chromedriver = True
+                    st.sidebar.success(f"✅ ChromeDriver instalado em: {driver_path}")
+                except Exception as e:
+                    st.sidebar.error(f"❌ Erro ao instalar ChromeDriver: {str(e)}")
+                    st.sidebar.info("Por favor, instale manualmente o ChromeDriver compatível com sua versão do Chrome")
+    elif is_railway():
+        # No Railway, assumimos que o ChromeDriver está disponível através do Dockerfile
+        st.session_state.has_chromedriver = True
+
+    # Sidebar com informações
+    st.sidebar.title("Configuração")
+
+    # No Railway sempre usamos headless, em local podemos escolher
+    if is_railway():
+        st.session_state.use_headless = True
+    else:
+        st.session_state.use_headless = st.sidebar.checkbox("Modo Headless", value=True, 
+                                    help="Se marcado, o navegador não será exibido na tela. Desmarque para depuração.")
+
+    # Interface do usuário
+    tab1, tab2, tab3 = st.tabs(["Execução Manual", "Agendamento", "Histórico"])
+
+    with tab1:
+        col1, col2 = st.columns([2, 1])
+    
+        with col1:
+            # Removido o formulário com credenciais
+            if st.button("Iniciar Automação Manual", key="iniciar_automacao_manual"):
+                if st.session_state.is_running:
+                    st.warning("Automação já está em execução.")
+                elif not dependencies_ok:
+                    st.error("Não é possível iniciar a automação. Verifique as dependências no painel lateral.")
+                elif not st.session_state.has_chromedriver:
+                    st.error("ChromeDriver não instalado. Verifique o painel lateral.")
+                else:
+                    # Inicia a automação diretamente (sem thread)
+                    st.session_state.is_running = True
+                    st.session_state.log_output = StringIO()  # Limpa o log anterior
+                    st.session_state.log_messages = []  # Limpa as mensagens de log
+                    st.session_state.error_messages = []  # Limpa as mensagens de erro
+                    st.session_state.progress = 0
+                    st.session_state.total_items = 0
+                    st.session_state.processed_items = 0
+                    st.session_state.success_count = 0
+                    st.session_state.failed_count = 0
+                    st.session_state.report = None
+                    st.session_state.automation_step = 'setup'
+                    st.session_state.current_row_index = 0
+                    st.session_state.rows = []
+                    st.session_state.failed_items = []
+                    st.session_state.closed_tabs = 0
+                    st.session_state.found_pagination = False
+                    st.session_state.email = DEFAULT_CREDENTIALS["email"]
+                    st.session_state.password = DEFAULT_CREDENTIALS["password"]
+                    st.session_state.start_time = time.time()
+                    st.success("Iniciando automação... Aguarde.")
+                    st.rerun()
+        
+        with col2:
+            st.subheader("Status")
+            
+            # Exibe o status atual
+            if st.session_state.is_running:
+                status = st.info("✅ Automação em execução...")
+                
+                # Botão para parar a automação
+                if st.button("Parar Automação", key="parar_automacao"):
+                    st.session_state.is_running = False
+                    
+                    # Fecha o navegador se estiver aberto
+                    if st.session_state.driver:
+                        try:
+                            st.session_state.driver.quit()
+                        except:
+                            pass
+                        st.session_state.driver = None
+                        
+                    st.warning("Automação interrompida pelo usuário.")
+                    st.rerun()
+            else:
+                if st.session_state.report:
+                    status = st.success("✅ Automação concluída!")
+                elif st.session_state.processed_items > 0:
+                    status = st.warning("⚠️ Automação interrompida.")
+                else:
+                    status = st.info("⏸️ Aguardando início da automação.")
+            
+            # Exibe estatísticas
+            st.metric("Novelties Processadas", st.session_state.processed_items)
+            st.metric("Sucesso", st.session_state.success_count)
+            st.metric("Falhas", st.session_state.failed_count)
+        
+        # Barra de progresso
+        if st.session_state.total_items > 0:
+            st.progress(st.session_state.progress)
+            st.caption(f"Progresso: {st.session_state.processed_items}/{st.session_state.total_items} items")
+        
+        # Exibe apenas erros, não o log completo
+        if st.session_state.error_messages:
+            st.subheader("Erros Detectados")
+            for error in st.session_state.error_messages[-10:]:  # Mostra apenas os 10 últimos erros
+                st.error(error["message"])
+        
+        # Se houver um relatório, exibe-o
+        if st.session_state.report and not st.session_state.is_running:
+            st.subheader("Relatório de Execução")
+            
+            report = st.session_state.report
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Processado", report.get("total_processados", 0))
+            with col2:
+                st.metric("Total Falhas", report.get("total_falhas", 0))
+            with col3:
+                st.metric("Guias Fechadas", report.get("guias_fechadas", 0))
+            
+            # Se houver falhas, exibe os detalhes
+            if report.get("total_falhas", 0) > 0:
+                st.subheader("Detalhes das Falhas")
+                
+                # Cria um DataFrame com os itens que falharam
+                failures_df = pd.DataFrame(report.get("itens_com_falha", []))
+                st.dataframe(failures_df)
+
+    with tab2:
+        st.subheader("Configuração de Automação Automática")
+        
+        # Carrega configurações de agendamento
+        schedule_config = load_schedule_config()
+        
+        # Campo para ativar/desativar automação agendada
+        is_auto_enabled = st.toggle("Ativar Automação Automática", value=schedule_config["is_enabled"])
+        
+        # Configuração do intervalo de execução
+        col1, col2 = st.columns(2)
+        with col1:
+            interval_hours = st.number_input("Intervalo de Execução (horas)", 
+                                            min_value=1, max_value=24, 
+                                            value=schedule_config["interval_hours"])
+        
+        # Configuração de horário de funcionamento
+        col1, col2 = st.columns(2)
+        with col1:
+            start_time = st.time_input("Horário de Início", 
+                                    value=datetime.datetime.strptime(schedule_config["start_time"], "%H:%M").time())
+        with col2:
+            end_time = st.time_input("Horário de Término", 
+                                value=datetime.datetime.strptime(schedule_config["end_time"], "%H:%M").time())
+        
+        # Salvar configurações
+        if st.button("Salvar Configurações de Agendamento"):
+            new_config = {
+                "is_enabled": is_auto_enabled,
+                "interval_hours": interval_hours,
+                "start_time": start_time.strftime("%H:%M"),
+                "end_time": end_time.strftime("%H:%M"),
+                "last_run": schedule_config.get("last_run")
+            }
+            
+            save_schedule_config(new_config)
+            
+            # Atualiza o agendador
+            if is_auto_enabled:
+                # Remove todos os jobs existentes
+                for job in st.session_state.scheduler.get_jobs():
+                    job.remove()
+                
+                # Adiciona o novo job
+                st.session_state.scheduler.add_job(
+                    lambda: st.session_state.update({"trigger_automation": True}),
+                    IntervalTrigger(hours=interval_hours),
+                    id='automation_job'
+                )
+                
+                st.success(f"✅ Automação agendada a cada {interval_hours} horas entre {start_time} e {end_time}")
+            else:
+                # Remove todos os jobs
+                for job in st.session_state.scheduler.get_jobs():
+                    job.remove()
+                st.info("❌ Automação automática desativada")
+            
+            st.rerun()
+        
+        # Exibe a última execução
+        if schedule_config.get("last_run"):
+            st.info(f"Última execução automática: {schedule_config['last_run']}")
+
+    with tab3:
+        st.subheader("Histórico de Execuções")
+        
+        # Filtro de data
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("Data Inicial", value=datetime.date.today() - datetime.timedelta(days=7))
+        with col2:
+            end_date = st.date_input("Data Final", value=datetime.date.today())
+        
+        # Botão para carregar dados
+        if st.button("Carregar Histórico"):
+            # Ajusta datas para incluir o dia inteiro
+            start_datetime = datetime.datetime.combine(start_date, datetime.time.min)
+            end_datetime = datetime.datetime.combine(end_date, datetime.time.max)
+            
+            # Usa a função importada que lida com ambos os bancos de dados
+            history_df = get_execution_history(start_datetime, end_datetime)
+            
+            if len(history_df) > 0:
+                # Formata os dados para exibição
+                history_df['execution_date'] = pd.to_datetime(history_df['execution_date'])
+                history_df['data'] = history_df['execution_date'].dt.date
+                history_df['hora'] = history_df['execution_date'].dt.time
+                history_df['tempo_execucao'] = history_df['execution_time'].apply(lambda x: f"{x:.2f} segundos")
+                
+                # Exibe o dataframe formatado
+                st.dataframe(
+                    history_df[['data', 'hora', 'total_processed', 'successful', 'failed', 'tempo_execucao']],
+                    column_config={
+                        'data': 'Data',
+                        'hora': 'Hora',
+                        'total_processed': 'Total Processado',
+                        'successful': 'Sucessos',
+                        'failed': 'Falhas',
+                        'tempo_execucao': 'Tempo de Execução'
+                    },
+                    height=400
+                )
+                
+                # Gráfico de resultados por dia
+                st.subheader("Resultados por Dia")
+                daily_stats = history_df.groupby('data').agg({
+                    'successful': 'sum',
+                    'failed': 'sum'
+                }).reset_index()
+                
+                # Converte para formato adequado para gráfico
+                chart_data = pd.DataFrame({
+                    'data': daily_stats['data'],
+                    'Sucessos': daily_stats['successful'],
+                    'Falhas': daily_stats['failed']
+                })
+                
+                st.bar_chart(chart_data.set_index('data'))
+            else:
+                st.info("Nenhum dado encontrado para o período selecionado.")
+                
+    # Rodapé
+    st.markdown("---")
+    st.caption("Automação Dropi Novelties © 2025")
 
 # Funções de automação (adaptadas para serem executadas passo a passo)
 def setup_driver():
@@ -1748,7 +2055,7 @@ def generate_report():
     
     report = {
         "execution_date": execution_date,
-        "total_processados": st.session_state.processed_items,
+        "total_processados": st.session_state.success_count,
         "total_falhas": len(st.session_state.failed_items),
         "itens_com_falha": st.session_state.failed_items,
         "guias_fechadas": st.session_state.closed_tabs,
@@ -1782,13 +2089,13 @@ def generate_report():
 
 # Função para executar a automação agendada
 def run_scheduled_automation():
-    """Executa a automação de acordo com o agendamento, sem restrições de horário."""
+    """Executa a automação de acordo com o agendamento."""
     # Verifica se já está em execução
     if st.session_state.is_running:
         logger.info("Automação já está em execução, ignorando chamada agendada")
         return
     
-    logger.info("Iniciando automação agendada (24/7)")
+    logger.info("Iniciando automação agendada")
     
     # Inicia a automação
     st.session_state.is_running = True
@@ -1822,13 +2129,9 @@ if 'trigger_automation' in st.session_state and st.session_state.trigger_automat
     st.session_state.trigger_automation = False
     run_scheduled_automation()
 
-# Função main a ser chamada pelo iniciar.py
-def main():
-    # As funções setup_driver, login, navigate_to_novelties, configure_entries_display,
-    # process_current_novelty, extract_address_from_page, fill_solution_field,
-    # click_save_button, fill_empty_fields, extract_data_from_table,
-    # handle_error, check_and_close_tabs, generate_report permanecem inalteradas
-    pass
+# Se este script for executado diretamente (não importado)
+if __name__ == "__main__":
+    main()
 
 # Processamento da automação baseado no estado atual
 if st.session_state.is_running:
