@@ -35,7 +35,7 @@ except ImportError:
     # Fallback sem banco de dados
     def init_database(): return None
     def save_execution_results(results): return None
-    def load_schedule_config(): return {"is_enabled": False, "interval_hours": 6, "last_run": None}
+    def load_schedule_config(): return {"is_enabled": False, "interval_hours": 6, "start_time": "00:00", "end_time": "23:59", "last_run": None}
     def save_schedule_config(config): return None
     def get_execution_history(start_date, end_date): return pd.DataFrame()
     def is_railway(): return "RAILWAY_ENVIRONMENT" in os.environ
@@ -352,6 +352,8 @@ with tab2:
         new_config = {
             "is_enabled": is_auto_enabled,
             "interval_hours": interval_hours,
+            "start_time": schedule_config.get("start_time", "00:00"),  # Preserva o valor existente
+            "end_time": schedule_config.get("end_time", "23:59"),      # Preserva o valor existente
             "last_run": schedule_config.get("last_run")
         }
         
@@ -2095,6 +2097,7 @@ def run_scheduled_automation():
         logger.info("Automação já está em execução, ignorando chamada agendada")
         return
     
+    # Remove a verificação de horário que existia aqui
     logger.info("Iniciando automação agendada")
     
     # Inicia a automação
