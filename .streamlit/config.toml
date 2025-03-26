@@ -1,17 +1,17 @@
 [theme]
-base="dark"
+base="light"
 
-# Mesma cor primária laranja
-primaryColor="#FF8C00"
+# Cor primária azul
+primaryColor="#1E88E5"
 
-# Cor de fundo bem escura
-backgroundColor="#000000"
+# Cor de fundo branca
+backgroundColor="#FFFFFF"
 
-# Fundo secundário (sidebar) ligeiramente mais claro
-secondaryBackgroundColor="#333333"
+# Fundo secundário (sidebar) azul claro
+secondaryBackgroundColor="#F0F8FF"
 
-# Cor do texto (branca)
-textColor="#FFFFFF"
+# Cor do texto (escura)
+textColor="#333333"
 
 # Fonte
-font="serif"
+font="sans-serif"

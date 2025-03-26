@@ -792,18 +792,16 @@ def setup_driver():
     chrome_options.add_argument("--disable-extensions")
     
     try:
-        # Dentro do Railway, usamos uma abordagem mais simples para iniciar o Chrome
         if is_railway():
+            # No Railway, use o Chrome e ChromeDriver instalados pelo Dockerfile
             logger.info("Inicializando o driver Chrome no Railway...")
-            # No ambiente Railway, o Chrome está instalado no sistema
-            driver = webdriver.Chrome(options=chrome_options)
+            service = Service()
+            driver = webdriver.Chrome(service=service, options=chrome_options)
         else:
-            # Localmente, continue usando o webdriver_manager
+            # Localmente, use o webdriver_manager
             logger.info("Inicializando o driver Chrome localmente...")
-            driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()),
-                options=chrome_options
-            )
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
             
         logger.info("Driver do Chrome iniciado com sucesso")
         st.session_state.driver = driver
