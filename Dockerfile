@@ -8,7 +8,8 @@ RUN apt-get update && apt-get install -y \
     wget \
     curl \
     gnupg \
-    unzip
+    unzip \
+    bash
 
 # Instala Chrome usando apt
 RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
@@ -32,8 +33,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copia o restante dos arquivos
 COPY . .
 
-# Expõe a porta para o Streamlit
+# Expõe a porta padrão para o Streamlit
 EXPOSE 8501
 
-# Comando para executar a aplicação
-CMD ["streamlit", "run", "iniciar.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Comando para executar a aplicação com expansão da variável PORT
+CMD bash -c "streamlit run iniciar.py --server.address=0.0.0.0 --server.port=\${PORT:-8501}"
