@@ -1,6 +1,7 @@
-streamlit==1.44.0
+streamlit>=1.44.0
 selenium==4.17.2
 webdriver-manager==4.0.1
 pandas==2.1.4
 apscheduler==3.10.4
 psycopg2-binary==2.9.9
+beautifulsoup4==4.12.2
