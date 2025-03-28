@@ -1,8 +1,5 @@
 import streamlit as st
 from streamlit.runtime.scriptrunner import RerunException, RerunData
-import os
-import importlib.util
-import sys
 
 # Função interna para forçar rerun (substitui st.experimental_rerun())
 def force_rerun():
@@ -33,31 +30,10 @@ def login_page():
 
 def show_logout_button():
     """Exibe um botão de logout na sidebar."""
-    if st.sidebar.button("Sair"):
+    if st.sidebar.button("Sair", key="logout_button"):
         st.session_state["logged_in"] = False
         st.session_state["cargo"] = None
         force_rerun()
-
-def load_page(page_path):
-    """Carrega dinamicamente uma página Python e executa sua função main()."""
-    try:
-        module_name = page_path.replace("/", ".").replace(".py", "")
-        spec = importlib.util.spec_from_file_location(module_name, page_path)
-        if not spec:
-            st.error(f"Não foi possível encontrar a página: {page_path}")
-            return
-            
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-        
-        # Verifica se o módulo tem uma função 'main' e a executa
-        if hasattr(module, 'main'):
-            module.main()
-        else:
-            st.error(f"A página {page_path} não tem uma função main().")
-    except Exception as e:
-        st.error(f"Erro ao carregar a página {page_path}: {str(e)}")
 
 def main():
     # Inicializa variáveis de sessão
@@ -65,87 +41,77 @@ def main():
         st.session_state["logged_in"] = False
     if "cargo" not in st.session_state:
         st.session_state["cargo"] = None
-    if "current_page" not in st.session_state:
-        st.session_state["current_page"] = "login"
 
+    # Adiciona CSS personalizado para a borda direita
+    st.markdown("""
+    <style>
+    section[data-testid="stSidebar"] {
+        border-right: 1px solid #e0e0e0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     # Se NÃO estiver logado, exibe apenas a página de login
     if not st.session_state["logged_in"]:
-        login_page()
+        # Cria o título aqui
+        st.sidebar.header("ChegouOperation")
+        st.sidebar.markdown("---")
+        
+        pages = [st.Page(login_page, title="Login", icon=":material/lock:")]
+        pg = st.navigation(pages, position="sidebar", expanded=False)
+        pg.run()
     else:
+        # Cria o título aqui
+        st.sidebar.header("ChegouOperation")
+        st.sidebar.markdown("---")
+        
         # Define páginas de acordo com o cargo
         if st.session_state["cargo"] == "Administrador":
             pages = {
                 "Principal": [
-                    {"title": "Home", "icon": "🏠", "path": "principal/home.py"},
+                    st.Page("principal/home.py", title="Home", icon=":material/home:"),
                 ],
                 "Novelties": [
-                    {"title": "México", "icon": "🇲🇽", "path": "novelties/mexico.py"},
-                    {"title": "Chile", "icon": "🇨🇱", "path": "novelties/chile.py"},
-                    {"title": "Colômbia", "icon": "🇨🇴", "path": "novelties/colombia.py"},
-                    {"title": "Equador", "icon": "🇪🇨", "path": "novelties/equador.py"},
+                    st.Page("novelties/mexico.py",   title="México",   icon=":material/flag:"),
+                    st.Page("novelties/chile.py",    title="Chile",    icon=":material/flag:"),
+                    st.Page("novelties/colombia.py", title="Colômbia", icon=":material/flag:"),
+                    st.Page("novelties/equador.py",  title="Equador",  icon=":material/flag:"),
                 ],
                 "Moderação": [
-                    {"title": "Busca pelo ID", "icon": "🔎", "path": "moderacao/busca_id.py"},
+                    st.Page("moderacao/busca_id.py", title="Busca pelo ID", icon=":material/manage_search:"),
                 ],
                 "Engajamento": [
-                    {"title": "Cadastrar", "icon": "📝", "path": "engajamento/cadastrar.py"},
-                    {"title": "Limpar URL", "icon": "🧹", "path": "engajamento/limpar_url.py"},
-                    {"title": "Comprar", "icon": "🛒", "path": "engajamento/comprar.py"},
+                    st.Page("engajamento/cadastrar.py",  title="Cadastrar", icon=":material/edit_note:"),
+                    st.Page("engajamento/comprar.py",    title="Comprar",    icon=":material/shopping_cart:"),
                 ],
             }
         else:
             # Usuário comum
             pages = {
                 "Principal": [
-                    {"title": "Home", "icon": "🏠", "path": "principal/home.py"},
+                    st.Page("principal/home.py", title="Home", icon=":material/home:"),
                 ],
                 "Novelties": [
-                    {"title": "México", "icon": "🌎", "path": "novelties/mexico.py"},
-                    {"title": "Chile", "icon": "🌎", "path": "novelties/chile.py"},
-                    {"title": "Colômbia", "icon": "🌎", "path": "novelties/colombia.py"},
-                    {"title": "Equador", "icon": "🌎", "path": "novelties/equador.py"},
+                    st.Page("novelties/mexico.py",   title="México",   icon=":material/flag:"),
+                    st.Page("novelties/chile.py",    title="Chile",    icon=":material/flag:"),
+                    st.Page("novelties/colombia.py", title="Colômbia", icon=":material/flag:"),
+                    st.Page("novelties/equador.py",  title="Equador",  icon=":material/flag:"),
                 ],
                 "Moderação": [
-                    {"title": "Busca pelo ID", "icon": "🔎", "path": "moderacao/busca_id.py"},
+                    st.Page("moderacao/busca_id.py", title="Busca pelo ID", icon=":material/manage_search:"),
                 ],
                 "Engajamento": [
-                    {"title": "Cadastrar", "icon": "📝", "path": "engajamento/cadastrar.py"},
-                    {"title": "Limpar URL", "icon": "🧹", "path": "engajamento/limpar_url.py"},
-                    {"title": "Comprar", "icon": "🛒", "path": "engajamento/comprar.py"},
+                    st.Page("engajamento/cadastrar.py",  title="Cadastrar", icon=":material/edit_note:"),
+                    st.Page("engajamento/comprar.py",    title="Comprar",    icon=":material/shopping_cart:"),
                 ],
             }
 
-        # Cria menu de navegação na sidebar
-        st.sidebar.title("Navegação")
-        
-        # Lista as categorias e páginas
-        all_pages = []
-        for category, category_pages in pages.items():
-            st.sidebar.subheader(category)
-            for page in category_pages:
-                page_key = f"{category}_{page['title']}"
-                if st.sidebar.button(f"{page['icon']} {page['title']}", key=page_key):
-                    st.session_state["current_page"] = page["path"]
-                    force_rerun()
-                all_pages.append(page)
-        
+        # Cria a barra de navegação
+        pg = st.navigation(pages, position="sidebar", expanded=False)
         # Exibe botão de logout
         show_logout_button()
-        
-        # Carrega a página atual
-        if st.session_state["current_page"] == "login":
-            # Se não selecionou nenhuma página, carrega a primeira
-            if all_pages:
-                load_page(all_pages[0]["path"])
-        else:
-            load_page(st.session_state["current_page"])
+        # Executa a página selecionada
+        pg.run()
 
 if __name__ == "__main__":
-    # Configura o tema para dark
-    st.set_page_config(
-        page_title="GC Operacional",
-        page_icon="📊",
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
     main()

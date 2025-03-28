@@ -5,13 +5,13 @@ base="light"
 primaryColor="#1E88E5"
 
 # Cor de fundo branca
-backgroundColor="#FFFFFF"
+backgroundColor="#FCFCF9"
 
 # Fundo secundário (sidebar) azul claro
-secondaryBackgroundColor="#F0F8FF"
+secondaryBackgroundColor="#F3F3EE"
 
 # Cor do texto (escura)
-textColor="#333333"
+textColor="#13343B"
 
 # Fonte
-font="sans-serif"
+font="sans serif"
