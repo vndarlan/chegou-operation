@@ -1,16 +1,19 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
+from db_connection import get_db_connection
+import sqlite3
 
 st.markdown("<h3>Registro de Engajamentos</h3>", unsafe_allow_html=True)
 
 # --- Funções para gerenciar o banco de dados SQLite ---
 def init_db():
-    conn = sqlite3.connect("engajamentos.db")
+    conn = get_db_connection()
     c = conn.cursor()
+    # SQLite-specific query should be changed to work with both databases
+    # For PostgreSQL compatibility:
     c.execute('''
         CREATE TABLE IF NOT EXISTS engajamentos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             nome TEXT NOT NULL,
             engajamento_id TEXT NOT NULL,
             tipo TEXT NOT NULL,
@@ -21,28 +24,51 @@ def init_db():
     conn.close()
 
 def add_missing_columns():
-    conn = sqlite3.connect("engajamentos.db")
+    conn = get_db_connection()
     c = conn.cursor()
-    c.execute("PRAGMA table_info(engajamentos)")
-    columns = [col[1] for col in c.fetchall()]
-    if "funcionando" not in columns:
-        c.execute("ALTER TABLE engajamentos ADD COLUMN funcionando TEXT NOT NULL DEFAULT 'Sim'")
-        conn.commit()
-    if "tipo" not in columns:
-        c.execute("ALTER TABLE engajamentos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'Like'")
-        conn.commit()
+    
+    # This needs to be handled differently for PostgreSQL vs SQLite
+    import os
+    if os.environ.get('RAILWAY_ENVIRONMENT'):
+        # PostgreSQL approach
+        c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='engajamentos'")
+        columns = [col[0] for col in c.fetchall()]
+        
+        if "funcionando" not in columns:
+            c.execute("ALTER TABLE engajamentos ADD COLUMN funcionando TEXT NOT NULL DEFAULT 'Sim'")
+        if "tipo" not in columns:
+            c.execute("ALTER TABLE engajamentos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'Like'")
+    else:
+        # SQLite approach (original code)
+        c.execute("PRAGMA table_info(engajamentos)")
+        columns = [col[1] for col in c.fetchall()]
+        if "funcionando" not in columns:
+            c.execute("ALTER TABLE engajamentos ADD COLUMN funcionando TEXT NOT NULL DEFAULT 'Sim'")
+        if "tipo" not in columns:
+            c.execute("ALTER TABLE engajamentos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'Like'")
+    
+    conn.commit()
     conn.close()
 
 def insert_engajamento(nome, engajamento_id, tipo):
-    conn = sqlite3.connect("engajamentos.db")
+    conn = get_db_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO engajamentos (nome, engajamento_id, tipo, funcionando) VALUES (?, ?, ?, ?)", 
-              (nome, engajamento_id, tipo, "Sim"))
+    
+    import os
+    if os.environ.get('RAILWAY_ENVIRONMENT'):
+        # PostgreSQL uses %s for parameters
+        c.execute("INSERT INTO engajamentos (nome, engajamento_id, tipo, funcionando) VALUES (%s, %s, %s, %s)", 
+                  (nome, engajamento_id, tipo, "Sim"))
+    else:
+        # SQLite uses ? for parameters
+        c.execute("INSERT INTO engajamentos (nome, engajamento_id, tipo, funcionando) VALUES (?, ?, ?, ?)", 
+                  (nome, engajamento_id, tipo, "Sim"))
+    
     conn.commit()
     conn.close()
 
 def get_engajamentos():
-    conn = sqlite3.connect("engajamentos.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT id, nome, engajamento_id, tipo, funcionando FROM engajamentos")
     rows = c.fetchall()
@@ -50,17 +76,34 @@ def get_engajamentos():
     return rows
 
 def update_engajamento(row_id, nome, engajamento_id, tipo, funcionando):
-    conn = sqlite3.connect("engajamentos.db")
+    conn = get_db_connection()
     c = conn.cursor()
-    c.execute("UPDATE engajamentos SET nome=?, engajamento_id=?, tipo=?, funcionando=? WHERE id=?", 
-              (nome, engajamento_id, tipo, funcionando, row_id))
+    
+    import os
+    if os.environ.get('RAILWAY_ENVIRONMENT'):
+        # PostgreSQL uses %s
+        c.execute("UPDATE engajamentos SET nome=%s, engajamento_id=%s, tipo=%s, funcionando=%s WHERE id=%s", 
+                  (nome, engajamento_id, tipo, funcionando, row_id))
+    else:
+        # SQLite uses ?
+        c.execute("UPDATE engajamentos SET nome=?, engajamento_id=?, tipo=?, funcionando=? WHERE id=?", 
+                  (nome, engajamento_id, tipo, funcionando, row_id))
+    
     conn.commit()
     conn.close()
 
 def delete_engajamento(row_id):
-    conn = sqlite3.connect("engajamentos.db")
+    conn = get_db_connection()
     c = conn.cursor()
-    c.execute("DELETE FROM engajamentos WHERE id=?", (row_id,))
+    
+    import os
+    if os.environ.get('RAILWAY_ENVIRONMENT'):
+        # PostgreSQL
+        c.execute("DELETE FROM engajamentos WHERE id=%s", (row_id,))
+    else:
+        # SQLite
+        c.execute("DELETE FROM engajamentos WHERE id=?", (row_id,))
+    
     conn.commit()
     conn.close()
 
