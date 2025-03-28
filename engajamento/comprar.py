@@ -7,6 +7,8 @@ import sqlite3
 import os
 from urllib.parse import urlparse, parse_qs
 from bs4 import BeautifulSoup
+from db_connection import get_db_connection
+
 
 # Importação condicional para não quebrar se não estiver instalado
 try:
@@ -43,33 +45,66 @@ if "urls_para_comprar_lote" not in st.session_state:
 def get_engajamentos():
     """Obtém os engajamentos do banco de dados."""
     try:
-        # Verificar se o banco de dados existe
-        if not os.path.exists("engajamentos.db"):
-            # Criar o banco e inserir alguns dados de exemplo
-            conn = sqlite3.connect("engajamentos.db")
-            c = conn.cursor()
-            c.execute('''CREATE TABLE IF NOT EXISTS engajamentos
-                        (id INTEGER PRIMARY KEY, nome TEXT, engajamento_id TEXT, funcionando TEXT, tipo TEXT)''')
-            # Inserir alguns dados de exemplo
-            exemplos = [
-                (1, "Like Facebook", "101", "Sim", "Like"),
-                (2, "Amei Facebook", "102", "Sim", "Amei"),
-                (3, "Uau Facebook", "103", "Sim", "Uau")
-            ]
-            c.executemany("INSERT OR IGNORE INTO engajamentos VALUES (?, ?, ?, ?, ?)", exemplos)
-            conn.commit()
-            conn.close()
-        
-        # Verificar se a coluna tipo existe
-        conn = sqlite3.connect("engajamentos.db")
+        conn = get_db_connection()
         c = conn.cursor()
-        c.execute("PRAGMA table_info(engajamentos)")
-        columns = [col[1] for col in c.fetchall()]
-        if "tipo" not in columns:
-            c.execute("ALTER TABLE engajamentos ADD COLUMN tipo TEXT DEFAULT 'Like'")
-            conn.commit()
         
-        # Obter os engajamentos
+        # Create table if it doesn't exist
+        if os.environ.get('RAILWAY_ENVIRONMENT'):
+            # PostgreSQL
+            c.execute("""
+            CREATE TABLE IF NOT EXISTS engajamentos (
+                id SERIAL PRIMARY KEY,
+                nome TEXT,
+                engajamento_id TEXT,
+                funcionando TEXT,
+                tipo TEXT DEFAULT 'Like'
+            )
+            """)
+            
+            # Check if sample data needs to be added (check if table is empty)
+            c.execute("SELECT COUNT(*) FROM engajamentos")
+            count = c.fetchone()[0]
+            
+            if count == 0:
+                # Add sample data
+                exemplos = [
+                    ("Like Facebook", "101", "Sim", "Like"),
+                    ("Amei Facebook", "102", "Sim", "Amei"),
+                    ("Uau Facebook", "103", "Sim", "Uau")
+                ]
+                for exemplo in exemplos:
+                    c.execute("""
+                    INSERT INTO engajamentos (nome, engajamento_id, funcionando, tipo)
+                    VALUES (%s, %s, %s, %s)
+                    """, exemplo)
+                
+            # Check columns
+            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='engajamentos'")
+            columns = [col[0] for col in c.fetchall()]
+            if "tipo" not in columns:
+                c.execute("ALTER TABLE engajamentos ADD COLUMN tipo TEXT DEFAULT 'Like'")
+        else:
+            # SQLite (original code)
+            if not os.path.exists("engajamentos.db"):
+                c.execute('''CREATE TABLE IF NOT EXISTS engajamentos
+                            (id INTEGER PRIMARY KEY, nome TEXT, engajamento_id TEXT, funcionando TEXT, tipo TEXT)''')
+                # Inserir dados de exemplo
+                exemplos = [
+                    (1, "Like Facebook", "101", "Sim", "Like"),
+                    (2, "Amei Facebook", "102", "Sim", "Amei"),
+                    (3, "Uau Facebook", "103", "Sim", "Uau")
+                ]
+                c.executemany("INSERT OR IGNORE INTO engajamentos VALUES (?, ?, ?, ?, ?)", exemplos)
+            
+            # Check columns
+            c.execute("PRAGMA table_info(engajamentos)")
+            columns = [col[1] for col in c.fetchall()]
+            if "tipo" not in columns:
+                c.execute("ALTER TABLE engajamentos ADD COLUMN tipo TEXT DEFAULT 'Like'")
+        
+        conn.commit()
+        
+        # Get engagements
         c.execute("SELECT id, nome, engajamento_id, funcionando, tipo FROM engajamentos")
         rows = c.fetchall()
         conn.close()
