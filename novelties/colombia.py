@@ -19,6 +19,11 @@ import platform
 import datetime
 import plotly.express as px
 from db_connection import get_execution_history  # Certifique-se de importar esta função
+try:
+    from db_connection import is_railway
+except ImportError:
+    def is_railway():
+        return "RAILWAY_ENVIRONMENT" in os.environ
 
 st.markdown("<h1 style='text-align: center;'>🇨🇴</h1>", unsafe_allow_html=True)
 # Adicione o CSS aqui
@@ -318,27 +323,34 @@ def setup_driver():
     logger.info("Iniciando configuração do driver Chrome...")
     
     chrome_options = Options()
-    if st.session_state.use_headless:
+    
+    # No Railway sempre use headless
+    if is_railway() or st.session_state.use_headless:
         logger.info("Modo headless ativado")
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
     else:
         logger.info("Modo headless desativado - navegador será visível")
     
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
-    
-    # Adiciona algumas flags básicas que ajudam com a estabilidade
     chrome_options.add_argument("--disable-extensions")
     
     try:
-        # Usa o webdriver_manager para gerenciar o ChromeDriver
-        logger.info("Inicializando o driver Chrome...")
-        driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=chrome_options
-        )
+        if is_railway():
+            # No Railway, usa o Chrome já instalado pelo Dockerfile
+            logger.info("Inicializando o driver Chrome no Railway...")
+            service = Service()
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        else:
+            # Localmente, usa o webdriver_manager
+            logger.info("Inicializando o driver Chrome localmente...")
+            driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()),
+                options=chrome_options
+            )
+            
         logger.info("Driver do Chrome iniciado com sucesso")
         st.session_state.driver = driver
         return True

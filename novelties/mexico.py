@@ -21,6 +21,11 @@ import platform
 import datetime
 import plotly.express as px
 from db_connection import get_execution_history  # Certifique-se de importar esta função
+try:
+    from db_connection import is_railway
+except ImportError:
+    def is_railway():
+        return "RAILWAY_ENVIRONMENT" in os.environ
 
 # Importa as funções de conexão com banco de dados com tratamento de erro
 try:
@@ -370,7 +375,7 @@ def setup_driver():
     
     chrome_options = Options()
     
-    # Sempre use headless no Railway ou se configurado localmente
+    # No Railway sempre use headless
     if is_railway() or st.session_state.use_headless:
         logger.info("Modo headless ativado")
         chrome_options.add_argument("--headless=new")
@@ -381,21 +386,21 @@ def setup_driver():
         logger.info("Modo headless desativado - navegador será visível")
     
     chrome_options.add_argument("--window-size=1920,1080")
-    
-    # Adiciona algumas flags básicas que ajudam com a estabilidade
     chrome_options.add_argument("--disable-extensions")
     
     try:
         if is_railway():
-            # No Railway, use o Chrome e ChromeDriver instalados pelo Dockerfile
+            # No Railway, usa o Chrome já instalado pelo Dockerfile
             logger.info("Inicializando o driver Chrome no Railway...")
             service = Service()
             driver = webdriver.Chrome(service=service, options=chrome_options)
         else:
-            # Localmente, use o webdriver_manager
+            # Localmente, usa o webdriver_manager
             logger.info("Inicializando o driver Chrome localmente...")
-            service = Service(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=chrome_options)
+            driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()),
+                options=chrome_options
+            )
             
         logger.info("Driver do Chrome iniciado com sucesso")
         st.session_state.driver = driver
