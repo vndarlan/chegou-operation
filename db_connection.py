@@ -6,7 +6,7 @@ import pandas as pd
 
 # Verifica se estamos rodando no Railway (presença da variável DATABASE_URL)
 def is_railway():
-    return os.environ.get('DATABASE_URL') is not None
+    return os.environ.get('RAILWAY_ENVIRONMENT') is not None
 
 # Função para obter conexão com o banco de dados apropriado
 def get_db_connection():

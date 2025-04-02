@@ -16,14 +16,24 @@ from io import StringIO
 import sys
 import os
 import platform
+import datetime
+import plotly.express as px
+from db_connection import get_execution_history  # Certifique-se de importar esta função
 
-# Título e descrição
-st.title("Automação de Novelties Dropi Colômbia ")
+st.markdown("<h1 style='text-align: center;'>🇨🇴</h1>", unsafe_allow_html=True)
+# Adicione o CSS aqui
 st.markdown("""
-Este aplicativo automatiza o processamento de novelties na plataforma Dropi do Colômbia .
-A automação é executada diretamente e você pode acompanhar o progresso em tempo real.
-""")
-
+<style>
+    .stButton>button {
+        border: none !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+    }
+    /* Hover effect */
+    .stButton>button:hover {
+        background-color: #f0f0f0 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 # Verificar e instalar dependências
 def check_dependencies():
     try:
@@ -106,6 +116,8 @@ if 'closed_tabs' not in st.session_state:
     st.session_state.closed_tabs = 0
 if 'found_pagination' not in st.session_state:
     st.session_state.found_pagination = False
+if 'show_log' not in st.session_state:
+    st.session_state.show_log = False
 
 # Sidebar com informações
 st.sidebar.title("Configuração")
@@ -156,96 +168,127 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-# Interface do usuário
-col1, col2 = st.columns([2, 1])
+tab1, tab2 = st.tabs(["Execução Manual", "Relatório"])
+with tab1:
+    # Interface do usuário - agora em linhas em vez de colunas
+    st.subheader("Execução Manual")
 
-with col1:
-    with st.form("login_form"):
-        st.subheader("Credenciais")
-        # Substitua estas credenciais pelas da Dropi Equador
-        email = st.text_input("Email", value="viniciuschegouoperacional@gmail.com")
-        password = st.text_input("Senha", value="123456cC", type="password")
-        
-        col_submit, col_info = st.columns([1, 2])
-        with col_submit:
-            submit_button = st.form_submit_button("Iniciar Automação")
-            
-        with col_info:
-            if not dependencies_ok or not st.session_state.has_chromedriver:
-                st.warning("⚠️ Verificação de dependências falhou. Veja o painel lateral.")
-            
-        if submit_button:
-            if st.session_state.is_running:
-                st.warning("Automação já está em execução.")
-            elif not dependencies_ok:
-                st.error("Não é possível iniciar a automação. Verifique as dependências no painel lateral.")
-            elif not st.session_state.has_chromedriver:
-                st.error("ChromeDriver não instalado. Verifique o painel lateral.")
-            else:
-                # Inicia a automação diretamente (sem thread)
-                st.session_state.is_running = True
-                st.session_state.log_output = StringIO()  # Limpa o log anterior
-                st.session_state.log_messages = []  # Limpa as mensagens de log
-                st.session_state.progress = 0
-                st.session_state.total_items = 0
-                st.session_state.processed_items = 0
-                st.session_state.success_count = 0
-                st.session_state.failed_count = 0
-                st.session_state.report = None
-                st.session_state.automation_step = 'setup'
-                st.session_state.current_row_index = 0
-                st.session_state.rows = []
-                st.session_state.failed_items = []
-                st.session_state.closed_tabs = 0
-                st.session_state.found_pagination = False
-                st.session_state.email = email
-                st.session_state.password = password
-                st.session_state.use_headless = use_headless
-                st.success("Iniciando automação... Aguarde.")
-                st.rerun()
+# Define as credenciais diretamente no código (não visíveis no UI)
+# Use suas credenciais reais aqui
+EMAIL_CREDENTIALS = "viniciuschegouoperacional@gmail.com"
+PASSWORD_CREDENTIALS = "123456cC"
 
-with col2:
-    st.subheader("Status")
+# Interface do usuário com layout reformulado
+with st.form("automation_form"):
+    # Botão para iniciar automação centralizado (sem borda grande)
+    submit_button = st.form_submit_button("Iniciar Automação", use_container_width=True)
     
-    # Exibe o status atual
-    if st.session_state.is_running:
-        status = st.info("✅ Automação em execução...")
-        
-        # Botão para parar a automação
-        if st.button("Parar Automação"):
-            st.session_state.is_running = False
-            
-            # Fecha o navegador se estiver aberto
-            if st.session_state.driver:
-                try:
-                    st.session_state.driver.quit()
-                except:
-                    pass
-                st.session_state.driver = None
-                
-            st.warning("Automação interrompida pelo usuário.")
-            st.rerun()
-    else:
-        if st.session_state.report:
-            status = st.success("✅ Automação concluída!")
-        elif st.session_state.processed_items > 0:
-            status = st.warning("⚠️ Automação interrompida.")
+    # Aviso de dependências abaixo do botão se necessário
+    if not dependencies_ok or not st.session_state.has_chromedriver:
+        st.warning("⚠️ Verificação de dependências falhou. Veja o painel lateral.")
+    
+    if submit_button:
+        if st.session_state.is_running:
+            st.warning("Automação já está em execução.")
+        elif not dependencies_ok:
+            st.error("Não é possível iniciar a automação. Verifique as dependências no painel lateral.")
+        elif not st.session_state.has_chromedriver:
+            st.error("ChromeDriver não instalado. Verifique o painel lateral.")
         else:
-            status = st.info("⏸️ Aguardando início da automação.")
+            # Inicia a automação diretamente (sem thread)
+            st.session_state.is_running = True
+            st.session_state.log_output = StringIO()  # Limpa o log anterior
+            st.session_state.log_messages = []  # Limpa as mensagens de log
+            st.session_state.progress = 0
+            st.session_state.total_items = 0
+            st.session_state.processed_items = 0
+            st.session_state.success_count = 0
+            st.session_state.failed_count = 0
+            st.session_state.report = None
+            st.session_state.automation_step = 'setup'
+            st.session_state.current_row_index = 0
+            st.session_state.rows = []
+            st.session_state.failed_items = []
+            st.session_state.closed_tabs = 0
+            st.session_state.found_pagination = False
+            st.session_state.email = EMAIL_CREDENTIALS
+            st.session_state.password = PASSWORD_CREDENTIALS
+            st.session_state.use_headless = use_headless
+            st.success("Iniciando automação... Aguarde.")
+            st.rerun()
+
+# Status em uma linha própria (agora fora do formulário)
+if st.session_state.is_running:
+    st.info("✅ Automação em execução...")
     
-    # Exibe estatísticas
-    st.metric("Novelties Processadas", st.session_state.processed_items)
-    st.metric("Sucesso", st.session_state.success_count)
-    st.metric("Falhas", st.session_state.failed_count)
+    # Botão para parar a automação
+    if st.button("Parar Automação"):
+        st.session_state.is_running = False
+        
+        # Fecha o navegador se estiver aberto
+        if st.session_state.driver:
+            try:
+                st.session_state.driver.quit()
+            except:
+                pass
+            st.session_state.driver = None
+            
+        st.warning("Automação interrompida pelo usuário.")
+        st.rerun()
+else:
+    if st.session_state.report:
+        st.success("✅ Automação concluída!")
+    elif st.session_state.processed_items > 0:
+        st.warning("⚠️ Automação interrompida.")
+    else:
+        st.info("⏸️ Aguardando início da automação.")
+
+# Métricas com bordas individuais
+st.markdown("""
+<style>
+    .metric-container {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 10px;
+        margin: 5px;
+        text-align: center;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+cols = st.columns(3)
+with cols[0]:
+    st.markdown(
+        f'<div class="metric-container"><p>Novelties Processadas</p><h1>{st.session_state.processed_items}</h1></div>', 
+        unsafe_allow_html=True
+    )
+with cols[1]:
+    st.markdown(
+        f'<div class="metric-container"><p>Sucesso</p><h1>{st.session_state.success_count}</h1></div>', 
+        unsafe_allow_html=True
+    )
+with cols[2]:
+    st.markdown(
+        f'<div class="metric-container"><p>Falhas</p><h1>{st.session_state.failed_count}</h1></div>', 
+        unsafe_allow_html=True
+    )
 
 # Barra de progresso
 if st.session_state.total_items > 0:
     st.progress(st.session_state.progress)
     st.caption(f"Progresso: {st.session_state.processed_items}/{st.session_state.total_items} items")
 
-# Exibe o log completo em uma área de texto
-log_container = st.container()
-log_container.text_area("Log Completo", value=st.session_state.log_output.getvalue(), height=400)
+# Linha divisória 
+st.markdown("<hr style='margin: 20px 0; border-top: 1px solid #ddd;'>", unsafe_allow_html=True)
+
+# Toggle para mostrar/ocultar o log completo
+show_log = st.checkbox("Mostrar Log Completo", value=st.session_state.show_log)
+st.session_state.show_log = show_log
+
+# Exibe o log completo apenas se o checkbox estiver marcado
+if st.session_state.show_log:
+    log_container = st.container()
+    log_container.text_area("Log Completo", value=st.session_state.log_output.getvalue(), height=400)
 
 # Se houver um relatório, exibe-o
 if st.session_state.report and not st.session_state.is_running:
@@ -268,10 +311,6 @@ if st.session_state.report and not st.session_state.is_running:
         # Cria um DataFrame com os itens que falharam
         failures_df = pd.DataFrame(report.get("itens_com_falha", []))
         st.dataframe(failures_df)
-
-# Rodapé
-st.markdown("---")
-st.caption("Automação Dropi Novelties Colômbia © 2025")
 
 # Funções de automação (adaptadas para serem executadas passo a passo)
 def setup_driver():
@@ -992,181 +1031,248 @@ def handle_dropdown_solution_form(driver, form_modal, customer_info):
         except Exception as e:
             logger.info(f"Erro ao buscar select: {str(e)}")
         
-        # PASSO 2: Selecionar a opção "Entregar en nueva dirección" diretamente
-        if select_element:
-            logger.info("Elemento select encontrado, tentando selecionar a opção...")
+        # Se não encontrou o select, tentar clicar em NO e depois Yes
+        if not select_element:
+            logger.error("Não foi possível encontrar o elemento select")
+            return click_no_yes_buttons(driver)
+        
+        # PASSO 2: Verificar se a opção desejada existe
+        option_exists = False
+        try:
+            # Lista todas as opções disponíveis para depuração
+            select = Select(select_element)
+            options = select.options
+            logger.info(f"Opções disponíveis no select ({len(options)}):")
             
-            from selenium.webdriver.support.ui import Select
-            option_selected = False
-            
-            try:
-                # Rola até o elemento para garantir que está visível
-                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", select_element)
-                time.sleep(1)
+            # MUDANÇA CRÍTICA: Verificar explicitamente se a opção existe
+            for i, option in enumerate(options):
+                option_text = option.text.lower().strip()
+                option_value = option.get_attribute("value")
+                logger.info(f"  Opção {i}: texto='{option_text}', valor='{option_value}'")
                 
-                # Método 1: Usando a classe Select do Selenium
+                # Verificar por diferentes variações do texto
+                if "entregar en nueva dirección" in option_text or "entregar en nueva direccion" in option_text:
+                    option_exists = True
+                    logger.info(f"Opção 'Entregar en nueva dirección' encontrada na posição {i}")
+            
+            # MUDANÇA CRÍTICA: Se a opção não existir, clique em NO e depois Yes
+            if not option_exists:
+                logger.warning("Opção 'Entregar en nueva dirección' NÃO encontrada! Tentando excluir o formulário...")
+                return click_no_yes_buttons(driver)
+                
+        except Exception as e:
+            logger.error(f"Erro ao verificar opções do select: {str(e)}")
+            # Se houver qualquer erro na verificação, tente excluir o formulário
+            logger.warning("Erro ao verificar opções. Tentando excluir o formulário...")
+            return click_no_yes_buttons(driver)
+        
+        # PASSO 3: Selecionar a opção "Entregar en nueva dirección" diretamente
+        option_selected = False
+        
+        try:
+            # Rola até o elemento para garantir que está visível
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", select_element)
+            time.sleep(1)
+            
+            # Método 1: Usando a classe Select do Selenium
+            try:
+                logger.info("Tentando selecionar com a classe Select...")
+                select = Select(select_element)
+                
+                # Tenta selecionar pelo texto visível
+                select.select_by_visible_text("Entregar en nueva dirección")
+                logger.info("Opção selecionada pelo texto visível")
+                option_selected = True
+            except Exception as e:
+                logger.info(f"Erro ao selecionar pelo texto visível: {str(e)}")
+                
+                # Tenta selecionar pelo valor - sabemos que é "2: Object"
                 try:
-                    logger.info("Tentando selecionar com a classe Select...")
-                    select = Select(select_element)
-                    
-                    # Lista todas as opções disponíveis para depuração
-                    options = select.options
-                    logger.info(f"Opções disponíveis no select ({len(options)}):")
-                    for i, option in enumerate(options):
-                        logger.info(f"  Opção {i}: texto='{option.text}', valor='{option.get_attribute('value')}'")
-                    
-                    # Tenta selecionar pelo texto visível
-                    select.select_by_visible_text("Entregar en nueva dirección")
-                    logger.info("Opção selecionada pelo texto visível")
+                    select.select_by_value("2: Object")
+                    logger.info("Opção selecionada pelo valor '2: Object'")
                     option_selected = True
                 except Exception as e:
-                    logger.info(f"Erro ao selecionar pelo texto visível: {str(e)}")
+                    logger.info(f"Erro ao selecionar pelo valor: {str(e)}")
                     
-                    # Tenta selecionar pelo valor - sabemos que é "2: Object"
+                    # Tenta selecionar pelo índice (a opção "Entregar en nueva dirección" é a terceira = índice 2)
                     try:
-                        select.select_by_value("2: Object")
-                        logger.info("Opção selecionada pelo valor '2: Object'")
+                        select.select_by_index(2)
+                        logger.info("Opção selecionada pelo índice 2")
                         option_selected = True
                     except Exception as e:
-                        logger.info(f"Erro ao selecionar pelo valor: {str(e)}")
-                        
-                        # Tenta selecionar pelo índice (a opção "Entregar en nueva dirección" é a terceira = índice 2)
-                        try:
-                            select.select_by_index(2)
-                            logger.info("Opção selecionada pelo índice 2")
-                            option_selected = True
-                        except Exception as e:
-                            logger.info(f"Erro ao selecionar pelo índice: {str(e)}")
-            except Exception as e:
-                logger.info(f"Erro ao usar a classe Select: {str(e)}")
-            
-            # Método 2: Usando JavaScript direto
-            if not option_selected:
-                try:
-                    logger.info("Tentando selecionar usando JavaScript...")
-                    
-                    # Define o valor diretamente via JavaScript
-                    driver.execute_script("arguments[0].value = '2: Object';", select_element)
-                    
-                    # Dispara evento de change para atualizar a interface
-                    driver.execute_script("arguments[0].dispatchEvent(new Event('change', { 'bubbles': true }));", select_element)
-                    
-                    logger.info("Valor '2: Object' configurado via JavaScript")
-                    option_selected = True
-                except Exception as e:
-                    logger.info(f"Erro ao selecionar via JavaScript: {str(e)}")
-            
-            # Tirar screenshot após selecionar a opção
+                        logger.info(f"Erro ao selecionar pelo índice: {str(e)}")
+        except Exception as e:
+            logger.info(f"Erro ao usar a classe Select: {str(e)}")
+        
+        # Método 2: Usando JavaScript direto
+        if not option_selected:
             try:
-                driver.save_screenshot("after_option_selected.png")
-                logger.info("Screenshot após selecionar opção")
-            except:
-                pass
-            
-            # Espera para o dropdown processar a seleção
-            time.sleep(3)
-            
-            # Se não conseguiu selecionar, tenta excluir o item
-            if not option_selected:
-                logger.warning("Não foi possível selecionar a opção, tentando excluir...")
-                try:
-                    # Procura e clica no botão "No"
-                    no_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'No')]")
-                    for button in no_buttons:
-                        if button.is_displayed():
-                            driver.execute_script("arguments[0].click();", button)
-                            logger.info("Clicado no botão 'No'")
-                            time.sleep(2)
-                            
-                            # Procura e clica no botão "Yes" para confirmar
-                            yes_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'Yes') or contains(text(), 'Sí') or contains(text(), 'Si')]")
-                            for yes_button in yes_buttons:
-                                if yes_button.is_displayed():
-                                    driver.execute_script("arguments[0].click();", yes_button)
-                                    logger.info("Clicado no botão 'Yes' para confirmar exclusão")
-                                    time.sleep(2)
-                                    return True
-                except Exception as e:
-                    logger.error(f"Erro ao tentar excluir: {str(e)}")
-                return False
-            
-            # PASSO 3: Preencher os campos "Detalle adicional" e "Dirección entrega"
-            # com o endereço do cliente
-            fields_filled = 0
-            
-            logger.info("Preenchendo campos após selecionar a opção...")
-            
-            # Preenche o campo "Detalle adicional de la solución"
-            try:
-                # Método 1: Usando fill_field_by_label
-                detalle_filled = fill_field_by_label(driver, form_modal, 
-                                                    ["Detalle adicional de la solución", "Detalle adicional"], 
-                                                    customer_info["address"])
+                logger.info("Tentando selecionar usando JavaScript...")
                 
-                # Método 2: Tentar encontrar por placeholder ou atributos
-                if not detalle_filled:
-                    detalles = driver.find_elements(By.XPATH, "//textarea | //input[contains(@placeholder, 'Detalle') or contains(@id, 'detalle') or contains(@name, 'detalle')]")
-                    for detalle in detalles:
-                        if detalle.is_displayed():
-                            driver.execute_script("arguments[0].value = '';", detalle)
-                            time.sleep(0.5)
-                            driver.execute_script(f"arguments[0].value = '{customer_info['address']}';", detalle)
-                            driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", detalle)
-                            driver.execute_script("arguments[0].dispatchEvent(new Event('input'));", detalle)
-                            logger.info("Campo 'Detalle adicional' preenchido via método alternativo")
-                            detalle_filled = True
-                            fields_filled += 1
-                            break
-                else:
-                    fields_filled += 1
-                    logger.info("Campo 'Detalle adicional' preenchido com sucesso")
-            except Exception as e:
-                logger.info(f"Erro ao preencher campo 'Detalle adicional': {str(e)}")
-            
-            # Preenche o campo "Dirección entrega"
-            try:
-                # Método 1: Usando fill_field_by_label
-                direccion_filled = fill_field_by_label(driver, form_modal, 
-                                                     ["Dirección entrega", "Dirección de entrega"], 
-                                                     customer_info["address"])
+                # Define o valor diretamente via JavaScript
+                driver.execute_script("arguments[0].value = '2: Object';", select_element)
                 
-                # Método 2: Tentar encontrar por placeholder ou atributos
-                if not direccion_filled:
-                    direcciones = driver.find_elements(By.XPATH, "//input[contains(@placeholder, 'dirección') or contains(@id, 'direccion') or contains(@name, 'direccion') or contains(@id, 'address') or contains(@name, 'address')]")
-                    for direccion in direcciones:
-                        if direccion.is_displayed():
-                            driver.execute_script("arguments[0].value = '';", direccion)
-                            time.sleep(0.5)
-                            driver.execute_script(f"arguments[0].value = '{customer_info['address']}';", direccion)
-                            driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", direccion)
-                            driver.execute_script("arguments[0].dispatchEvent(new Event('input'));", direccion)
-                            logger.info("Campo 'Dirección entrega' preenchido via método alternativo")
-                            direccion_filled = True
-                            fields_filled += 1
-                            break
-                else:
-                    fields_filled += 1
-                    logger.info("Campo 'Dirección entrega' preenchido com sucesso")
+                # Dispara evento de change para atualizar a interface
+                driver.execute_script("arguments[0].dispatchEvent(new Event('change', { 'bubbles': true }));", select_element)
+                
+                logger.info("Valor '2: Object' configurado via JavaScript")
+                option_selected = True
             except Exception as e:
-                logger.info(f"Erro ao preencher campo 'Dirección entrega': {str(e)}")
+                logger.info(f"Erro ao selecionar via JavaScript: {str(e)}")
+        
+        # Tirar screenshot após selecionar a opção
+        try:
+            driver.save_screenshot("after_option_selected.png")
+            logger.info("Screenshot após selecionar opção")
+        except:
+            pass
+        
+        # Espera para o dropdown processar a seleção
+        time.sleep(3)
+        
+        # Se não conseguiu selecionar, tenta excluir o item
+        if not option_selected:
+            logger.warning("Não foi possível selecionar a opção, tentando excluir...")
+            return click_no_yes_buttons(driver)
+        
+        # PASSO 4: Preencher os campos "Detalle adicional" e "Dirección entrega"
+        # com o endereço do cliente
+        fields_filled = 0
+        
+        logger.info("Preenchendo campos após selecionar a opção...")
+        
+        # Preenche o campo "Detalle adicional de la solución"
+        try:
+            # Método 1: Usando fill_field_by_label
+            detalle_filled = fill_field_by_label(driver, form_modal, 
+                                                ["Detalle adicional de la solución", "Detalle adicional"], 
+                                                customer_info["address"])
             
-            # Tirar screenshot após preencher os campos
-            try:
-                driver.save_screenshot("after_fields_filled.png")
-                logger.info("Screenshot após preencher os campos")
-            except:
-                pass
+            # Método 2: Tentar encontrar por placeholder ou atributos
+            if not detalle_filled:
+                detalles = driver.find_elements(By.XPATH, "//textarea | //input[contains(@placeholder, 'Detalle') or contains(@id, 'detalle') or contains(@name, 'detalle')]")
+                for detalle in detalles:
+                    if detalle.is_displayed():
+                        driver.execute_script("arguments[0].value = '';", detalle)
+                        time.sleep(0.5)
+                        driver.execute_script(f"arguments[0].value = '{customer_info['address']}';", detalle)
+                        driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", detalle)
+                        driver.execute_script("arguments[0].dispatchEvent(new Event('input'));", detalle)
+                        logger.info("Campo 'Detalle adicional' preenchido via método alternativo")
+                        detalle_filled = True
+                        fields_filled += 1
+                        break
+            else:
+                fields_filled += 1
+                logger.info("Campo 'Detalle adicional' preenchido com sucesso")
+        except Exception as e:
+            logger.info(f"Erro ao preencher campo 'Detalle adicional': {str(e)}")
+        
+        # Preenche o campo "Dirección entrega"
+        try:
+            # Método 1: Usando fill_field_by_label
+            direccion_filled = fill_field_by_label(driver, form_modal, 
+                                                 ["Dirección entrega", "Dirección de entrega"], 
+                                                 customer_info["address"])
             
-            logger.info(f"Total de {fields_filled} campos preenchidos após selecionar a opção")
-            return fields_filled > 0
-            
-        else:
-            logger.error("Não foi possível encontrar o elemento select")
-            return False
+            # Método 2: Tentar encontrar por placeholder ou atributos
+            if not direccion_filled:
+                direcciones = driver.find_elements(By.XPATH, "//input[contains(@placeholder, 'dirección') or contains(@id, 'direccion') or contains(@name, 'direccion') or contains(@id, 'address') or contains(@name, 'address')]")
+                for direccion in direcciones:
+                    if direccion.is_displayed():
+                        driver.execute_script("arguments[0].value = '';", direccion)
+                        time.sleep(0.5)
+                        driver.execute_script(f"arguments[0].value = '{customer_info['address']}';", direccion)
+                        driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", direccion)
+                        driver.execute_script("arguments[0].dispatchEvent(new Event('input'));", direccion)
+                        logger.info("Campo 'Dirección entrega' preenchido via método alternativo")
+                        direccion_filled = True
+                        fields_filled += 1
+                        break
+            else:
+                fields_filled += 1
+                logger.info("Campo 'Dirección entrega' preenchido com sucesso")
+        except Exception as e:
+            logger.info(f"Erro ao preencher campo 'Dirección entrega': {str(e)}")
+        
+        # Tirar screenshot após preencher os campos
+        try:
+            driver.save_screenshot("after_fields_filled.png")
+            logger.info("Screenshot após preencher os campos")
+        except:
+            pass
+        
+        logger.info(f"Total de {fields_filled} campos preenchidos após selecionar a opção")
+        return fields_filled > 0
             
     except Exception as e:
         logger.error(f"Erro ao processar formulário com dropdown: {str(e)}")
         logger.error(traceback.format_exc())
+        return False
+
+def click_no_yes_buttons(driver):
+    """Função para clicar em NO e depois Yes quando não podemos processar o formulário."""
+    try:
+        logger.info("Tentando clicar em NO e depois Yes para excluir o formulário...")
+        
+        # Procura e clica no botão "No"
+        no_clicked = False
+        try:
+            # Procura botões com texto "NO" ou classe de botão danger (vermelho)
+            no_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'NO') or contains(@class, 'btn-danger')]")
+            for button in no_buttons:
+                if button.is_displayed():
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+                    time.sleep(1)
+                    driver.execute_script("arguments[0].click();", button)
+                    logger.info("Clicado no botão 'NO' via JavaScript")
+                    time.sleep(2)
+                    no_clicked = True
+                    break
+            
+            if not no_clicked:
+                logger.warning("Não foi possível encontrar ou clicar no botão 'NO'")
+                return False
+            
+            # Agora procura e clica no botão "Yes" para confirmar
+            yes_clicked = False
+            
+            # Procura por diferentes variações de "Yes"
+            for text in ["Yes", "YES"]:
+                yes_buttons = driver.find_elements(By.XPATH, f"//button[contains(text(), '{text}')]")
+                for button in yes_buttons:
+                    if button.is_displayed():
+                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+                        time.sleep(1)
+                        driver.execute_script("arguments[0].click();", button)
+                        logger.info(f"Clicado no botão '{text}' via JavaScript para confirmar exclusão")
+                        time.sleep(2)
+                        yes_clicked = True
+                        break
+                
+                if yes_clicked:
+                    break
+            
+            if not yes_clicked:
+                logger.warning("Não foi possível encontrar ou clicar no botão Yes após NO")
+                return False
+            
+            logger.info("Exclusão do formulário confirmada com sucesso (NO + Yes)")
+            
+            # Sinaliza que o formulário foi excluído com sucesso
+            st.session_state.form_excluded = True
+            
+            # Aguarda para ter certeza que tudo processou
+            time.sleep(5)
+            
+            # Retorna True para indicar sucesso e pular para o próximo item
+            return True
+            
+        except Exception as e:
+            logger.error(f"Erro ao clicar nos botões NO/Yes: {str(e)}")
+            return False
+    except Exception as e:
+        logger.error(f"Erro ao tentar excluir formulário: {str(e)}")
         return False
 
 def fill_form_fields(driver, form_modal, customer_info):
@@ -1517,6 +1623,12 @@ def fill_form_fields(driver, form_modal, customer_info):
             logger.error(f"Erro ao verificar preenchimento final: {str(e)}")
         
         logger.info(f"Total de {fields_filled} campos preenchidos no formulário")
+        
+        # NOVA VERIFICAÇÃO: Se não preencheu nenhum campo, tentar excluir o formulário
+        if fields_filled == 0:
+            logger.warning("Nenhum campo foi preenchido, tentando excluir o formulário...")
+            return click_no_yes_buttons(driver)
+            
         return fields_filled > 0
     except Exception as e:
         logger.error(f"Erro ao preencher campos do formulário: {str(e)}")
@@ -1788,6 +1900,38 @@ def process_current_novelty():
                         # Tenta clicar com JavaScript para maior confiabilidade
                         driver.execute_script("arguments[0].click();", save_button)
                         logger.info("Botão 'Save' clicado via JavaScript")
+                        
+                        # NOVA VERIFICAÇÃO: Verificar se a janela ainda existe após clicar
+                        time.sleep(2)
+                        try:
+                            # Tenta acessar o título atual para verificar se a janela existe
+                            current_title = driver.title
+                        except Exception as window_error:
+                            logger.warning(f"Janela do navegador foi fechada: {str(window_error)}")
+                            # Fecha o driver atual se existir
+                            try:
+                                if st.session_state.driver:
+                                    st.session_state.driver.quit()
+                            except:
+                                pass
+                            
+                            # Reconfigura o driver
+                            setup_driver()
+                            
+                            # Reinicia o login e navegação
+                            if login():
+                                navigate_to_novelties()
+                                configure_entries_display()
+                            
+                            # Registra como processado com sucesso
+                            st.session_state.success_count += 1
+                            logger.info(f"Novelty {row_id} processada com sucesso (janela fechada e reaberta)!")
+                            
+                            # Avança para a próxima novelty
+                            st.session_state.current_row_index += 1
+                            st.session_state.processed_items = st.session_state.current_row_index
+                            st.session_state.progress = st.session_state.current_row_index / st.session_state.total_items
+                            return False
                     else:
                         logger.warning("Botão 'Save' não encontrado na linha atual")
                         # Registra a falha
@@ -1828,7 +1972,7 @@ def process_current_novelty():
             yes_clicked = False
             
             # Método 1: Procura por texto exato
-            for text in ["Yes", "Sim", "YES", "SIM", "yes", "sim"]:
+            for text in ["Yes", "YES"]:
                 try:
                     yes_buttons = driver.find_elements(By.XPATH, f"//button[contains(text(), '{text}')]")
                     for button in yes_buttons:
@@ -1909,6 +2053,37 @@ def process_current_novelty():
             if not yes_clicked:
                 logger.warning("Não foi possível clicar em 'Yes'/'Sim'. Tentando continuar...")
             
+            # Verificar novamente se a janela ainda existe após Yes
+            try:
+                # Tenta acessar o título atual
+                current_title = driver.title
+            except Exception as window_error:
+                logger.warning(f"Janela do navegador foi fechada após clicar em Yes: {str(window_error)}")
+                # Fecha o driver atual se existir
+                try:
+                    if st.session_state.driver:
+                        st.session_state.driver.quit()
+                except:
+                    pass
+                
+                # Reconfigura o driver
+                setup_driver()
+                
+                # Reinicia o login e navegação
+                if login():
+                    navigate_to_novelties()
+                    configure_entries_display()
+                
+                # Registra como processado com sucesso
+                st.session_state.success_count += 1
+                logger.info(f"Novelty {row_id} processada com sucesso (janela fechada após Yes)!")
+                
+                # Avança para a próxima novelty
+                st.session_state.current_row_index += 1
+                st.session_state.processed_items = st.session_state.current_row_index
+                st.session_state.progress = st.session_state.current_row_index / st.session_state.total_items
+                return False
+            
             # Espera após clicar no botão Yes - tempo aumentado
             logger.info("Aguardando 5 segundos após 'Yes'...")
             time.sleep(5)
@@ -1976,10 +2151,24 @@ def process_current_novelty():
                 logger.info("Formulário ou campos encontrados, preenchendo...")
                 
                 # Preenche os campos do formulário
-                fields_filled = fill_form_fields(driver, form_modal, customer_info)
+                result = fill_form_fields(driver, form_modal, customer_info)
+                
+                # Verificar se o formulário foi excluído via NO+Yes
+                if st.session_state.get('form_excluded', False):
+                    logger.info("Formulário foi excluído com sucesso (NO+YES). Prosseguindo para próxima novelty.")
+                    # Reseta o flag
+                    st.session_state.form_excluded = False
+                    # Incrementa contador de sucesso
+                    st.session_state.success_count += 1
+                    # Incrementa o índice para a próxima novelty
+                    st.session_state.current_row_index += 1
+                    # Atualiza o progresso
+                    st.session_state.processed_items = st.session_state.current_row_index
+                    st.session_state.progress = st.session_state.current_row_index / st.session_state.total_items
+                    return False  # Retorna para processar a próxima novelty
                 
                 # Clica em Salvar/Guardar se pelo menos um campo foi preenchido
-                if fields_filled:
+                if result:
                     # Clica em Salvar/Guardar - tentando vários textos
                     save_clicked = click_save_button(driver)
                     
@@ -2552,3 +2741,64 @@ if st.session_state.is_running:
     elif st.session_state.automation_step == 'complete':
         st.session_state.is_running = False
         st.success("Automação concluída com sucesso!")
+
+with tab2:
+    st.subheader("Relatório de Execuções")
+    
+    # Filtros de data
+    col1, col2 = st.columns(2)
+    with col1:
+        default_start_date = datetime.datetime.now() - datetime.timedelta(days=30)
+        start_date = st.date_input("Data Inicial", value=default_start_date)
+    with col2:
+        end_date = st.date_input("Data Final", value=datetime.datetime.now())
+    
+    # Converte as datas para o formato string YYYY-MM-DD
+    start_date_str = start_date.strftime("%Y-%m-%d")
+    end_date_str = end_date.strftime("%Y-%m-%d") + " 23:59:59"
+    
+    # Botão para atualizar o relatório
+    if st.button("Atualizar Relatório", key="update_report"):
+        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
+    
+    # Inicializa a variável filtered_data
+    if 'filtered_data' not in st.session_state:
+        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
+    
+    # Exibe os dados em formato de tabela
+    if st.session_state.filtered_data.empty:
+        st.info("Não há dados de execução para o período selecionado.")
+    else:
+        # Formatação da tabela
+        display_df = st.session_state.filtered_data.copy()
+        display_df['execution_date'] = pd.to_datetime(display_df['execution_date'])
+        display_df['data_execucao'] = display_df['execution_date'].dt.strftime('%d/%m/%Y %H:%M')
+        
+        # Renomeia colunas para português
+        display_df.rename(columns={
+            'total_processed': 'Total Processado',
+            'successful': 'Sucessos',
+            'failed': 'Falhas',
+            'execution_time': 'Tempo (segundos)'
+        }, inplace=True)
+        
+        # Exibe a tabela
+        display_columns = ['data_execucao', 'Total Processado', 'Sucessos', 'Falhas', 'Tempo (segundos)']
+        st.dataframe(display_df[display_columns], width=800)
+        
+        # Estatísticas
+        total_novelties = display_df['Total Processado'].sum()
+        total_success = display_df['Sucessos'].sum()
+        total_failed = display_df['Falhas'].sum()
+        avg_time = display_df['Tempo (segundos)'].mean()
+        
+        # Métricas
+        stats_cols = st.columns(4)
+        with stats_cols[0]:
+            st.metric("Total de Novelties", f"{total_novelties}")
+        with stats_cols[1]:
+            st.metric("Total de Sucessos", f"{total_success}")
+        with stats_cols[2]:
+            st.metric("Total de Falhas", f"{total_failed}")
+        with stats_cols[3]:
+            st.metric("Tempo Médio (s)", f"{avg_time:.2f}")

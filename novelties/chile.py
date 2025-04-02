@@ -16,6 +16,15 @@ from io import StringIO
 import sys
 import os
 import platform
+import re
+import datetime
+import plotly.express as px
+from db_connection import get_execution_history  # Certifique-se de importar esta função
+try:
+    from db_connection import is_railway
+except ImportError:
+    def is_railway():
+        return "RAILWAY_ENVIRONMENT" in os.environ
 
 # Função para criar pasta de screenshots se não existir
 def create_screenshots_folder():
@@ -25,11 +34,26 @@ def create_screenshots_folder():
     return "screenshots"
 
 # Título e descrição
-st.title("Automação de Novelties Dropi Equador")
+st.markdown("<h1 style='text-align: center;'>Automação de Novelties Dropi Equador</h1>", unsafe_allow_html=True)
+# Adicionar CSS após o título
 st.markdown("""
-Este aplicativo automatiza o processamento de novelties na plataforma Dropi do Equador.
-A automação é executada diretamente e você pode acompanhar o progresso em tempo real.
-""")
+<style>
+    .stButton>button {
+        border: none !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+    }
+    .stButton>button:hover {
+        background-color: #f0f0f0 !important;
+    }
+    .metric-container {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 10px;
+        margin: 5px;
+        text-align: center;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Verificar e instalar dependências
 def check_dependencies():
@@ -165,19 +189,19 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+tab1, tab2 = st.tabs(["Execução Manual", "Relatório"])
+with tab1:
+    # Interface do usuário - agora em linhas em vez de colunas
+    st.subheader("Execução Manual")
+
 # Interface do usuário
 col1, col2 = st.columns([2, 1])
 
-with col1:
-    # Removido o formulário de entrada de credenciais, usando valores fixos
-    st.subheader("Automação Dropi")
-    col_submit, col_info = st.columns([1, 2])
-    with col_submit:
-        submit_button = st.button("Iniciar Automação")
-        
-    with col_info:
-        if not dependencies_ok or not st.session_state.has_chromedriver:
-            st.warning("⚠️ Verificação de dependências falhou. Veja o painel lateral.")
+with st.form("automation_form"):
+    submit_button = st.form_submit_button("Iniciar Automação", use_container_width=True)
+    
+    if not dependencies_ok or not st.session_state.has_chromedriver:
+        st.warning("⚠️ Verificação de dependências falhou. Veja o painel lateral.")
         
     if submit_button:
         if st.session_state.is_running:
@@ -210,48 +234,66 @@ with col1:
             st.success("Iniciando automação... Aguarde.")
             st.rerun()
 
-with col2:
-    st.subheader("Status")
+if st.session_state.is_running:
+    st.info("✅ Automação em execução...")
     
-    # Exibe o status atual
-    if st.session_state.is_running:
-        status = st.info("✅ Automação em execução...")
+    if st.button("Parar Automação"):
+        st.session_state.is_running = False
         
-        # Botão para parar a automação
-        if st.button("Parar Automação"):
-            st.session_state.is_running = False
+        if st.session_state.driver:
+            try:
+                st.session_state.driver.quit()
+            except:
+                pass
+            st.session_state.driver = None
             
-            # Fecha o navegador se estiver aberto
-            if st.session_state.driver:
-                try:
-                    st.session_state.driver.quit()
-                except:
-                    pass
-                st.session_state.driver = None
-                
-            st.warning("Automação interrompida pelo usuário.")
-            st.rerun()
+        st.warning("Automação interrompida pelo usuário.")
+        st.rerun()
+else:
+    if st.session_state.report:
+        st.success("✅ Automação concluída!")
+    elif st.session_state.processed_items > 0:
+        st.warning("⚠️ Automação interrompida.")
     else:
-        if st.session_state.report:
-            status = st.success("✅ Automação concluída!")
-        elif st.session_state.processed_items > 0:
-            status = st.warning("⚠️ Automação interrompida.")
-        else:
-            status = st.info("⏸️ Aguardando início da automação.")
+        st.info("⏸️ Aguardando início da automação.")
     
-    # Exibe estatísticas
-    st.metric("Novelties Processadas", st.session_state.processed_items)
-    st.metric("Sucesso", st.session_state.success_count)
-    st.metric("Falhas", st.session_state.failed_count)
+# Métricas com bordas individuais
+cols = st.columns(3)
+with cols[0]:
+    st.markdown(
+        f'<div class="metric-container"><p>Novelties Processadas</p><h1>{st.session_state.processed_items}</h1></div>', 
+        unsafe_allow_html=True
+    )
+with cols[1]:
+    st.markdown(
+        f'<div class="metric-container"><p>Sucesso</p><h1>{st.session_state.success_count}</h1></div>', 
+        unsafe_allow_html=True
+    )
+with cols[2]:
+    st.markdown(
+        f'<div class="metric-container"><p>Falhas</p><h1>{st.session_state.failed_count}</h1></div>', 
+        unsafe_allow_html=True
+    )
 
 # Barra de progresso
 if st.session_state.total_items > 0:
     st.progress(st.session_state.progress)
     st.caption(f"Progresso: {st.session_state.processed_items}/{st.session_state.total_items} items")
 
-# Exibe o log completo em uma área de texto
-log_container = st.container()
-log_container.text_area("Log Completo", value=st.session_state.log_output.getvalue(), height=400)
+# Linha divisória 
+st.markdown("<hr style='margin: 20px 0; border-top: 1px solid #ddd;'>", unsafe_allow_html=True)
+
+# Toggle para mostrar/ocultar o log completo
+if 'show_log' not in st.session_state:
+    st.session_state.show_log = False
+
+show_log = st.checkbox("Mostrar Log Completo", value=st.session_state.show_log)
+st.session_state.show_log = show_log
+
+# Exibe o log completo apenas se o checkbox estiver marcado
+if st.session_state.show_log:
+    log_container = st.container()
+    log_container.text_area("Log Completo", value=st.session_state.log_output.getvalue(), height=400)
 
 # Se houver um relatório, exibe-o
 if st.session_state.report and not st.session_state.is_running:
@@ -285,27 +327,34 @@ def setup_driver():
     logger.info("Iniciando configuração do driver Chrome...")
     
     chrome_options = Options()
-    if st.session_state.use_headless:
+    
+    # No Railway sempre use headless
+    if is_railway() or st.session_state.use_headless:
         logger.info("Modo headless ativado")
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
     else:
         logger.info("Modo headless desativado - navegador será visível")
     
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
-    
-    # Adiciona algumas flags básicas que ajudam com a estabilidade
     chrome_options.add_argument("--disable-extensions")
     
     try:
-        # Usa o webdriver_manager para gerenciar o ChromeDriver
-        logger.info("Inicializando o driver Chrome...")
-        driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=chrome_options
-        )
+        if is_railway():
+            # No Railway, usa o Chrome já instalado pelo Dockerfile
+            logger.info("Inicializando o driver Chrome no Railway...")
+            service = Service()
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        else:
+            # Localmente, usa o webdriver_manager
+            logger.info("Inicializando o driver Chrome localmente...")
+            driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()),
+                options=chrome_options
+            )
+            
         logger.info("Driver do Chrome iniciado com sucesso")
         st.session_state.driver = driver
         return True
@@ -1035,66 +1084,54 @@ def parse_chilean_address(address):
         }
     
 def generate_automatic_message(form_text):
-    """Gera mensagens automáticas com base no texto do formulário."""
+    """Gera mensagens automáticas com base no texto específico da incidência no formulário."""
     try:
-        # Converte para maiúsculas para facilitar a verificação e remove espaços extras
+        # Converte para maiúsculas para facilitar a verificação
         form_text = form_text.upper().strip()
-        logger.info(f"Texto do formulário para análise (primeiros 100 caracteres): '{form_text[:100]}...'")
+        logger.info(f"Texto completo do formulário: '{form_text}'")
         
-        # IMPORTANTE: Força a verificação da presença de textos críticos
-        critical_phrases = [
-            "DIRECCIÓN INCORRECTA",
-            "DIRECCION INCORRECTA",  # Sem acento, por segurança
-            "ENTREGA RECHAZADA",
-            "RECHAZA PAQUETE",
-            "RECHAZA",
-            "PROBLEMA COBRO",
-            "CLIENTE AUSENTE",
-            "FALTAN DADOS",
-            "DIRECCION INUBICABLE",
-            "COMUNA ERRADA",
-            "CAMBIO DE DOMICILIO",
-            "FALTAN DATOS"
-        ]
+        # Tenta extrair apenas a incidência relevante do formulário
+        # Procura pelo padrão específico da incidência que aparece isolada no meio do formulário
+        incidence = ""
         
-        # Log de diagnóstico para depuração
-        for phrase in critical_phrases:
-            if phrase in form_text:
-                logger.info(f"DETECÇÃO CRÍTICA: Frase '{phrase}' ENCONTRADA no texto!")
-            else:
-                logger.info(f"Frase '{phrase}' não encontrada no texto.")
+        # Busca por linhas que contenham apenas a incidência, normalmente entre textos específicos
+        lines = form_text.split('\n')
+        for line in lines:
+            line = line.strip()
+            # Verifica se a linha contém uma das incidências conhecidas
+            if any(key in line for key in ["RECHAZA", "INCORRECTA", "AUSENTE", "INUBICABLE", "FALTAN DATOS"]) and "INCIDENCE:" not in line:
+                incidence = line
+                logger.info(f"INCIDÊNCIA PRINCIPAL DETECTADA: '{incidence}'")
+                break
         
-        # Verifica cada condição e registra no log para depuração
-        # IMPORTANTE: A ordem das verificações é crucial! Condições mais específicas primeiro.
-        
-        # 1. ENTREGA RECHAZADA ou RECHAZA PAQUETE ou RECHAZA - VERIFICAÇÃO PRIORITÁRIA
-        if any(phrase in form_text for phrase in ["ENTREGA RECHAZADA", "RECHAZA PAQUETE", "RECHAZA"]):
-            message = "En llamada telefónica, el cliente afirma que quiere el producto y mencionó que no fue buscado por la transportadora. Por lo tanto, por favor envíen el producto hasta el cliente."
-            logger.info("DETECTADO PRIORITÁRIO: RECHAZO DE ENTREGA")
-            return message
-        
-        # 3. PROBLEMA COBRO
-        elif "PROBLEMA COBRO" in form_text:
-            message = "En llamada telefónica, el cliente afirmó que estará con dinero suficiente para comprar el producto, por favor intenten nuevamente."
-            logger.info("Detectado caso: PROBLEMA COBRO")
-            return message
-        
-        # 4. FALTAN DADOS, DIRECCION INUBICABLE, etc. (problemas de endereço)
-        elif any(phrase in form_text for phrase in ["FALTAN DADOS", "INUBICABLE", "PARA SOLUCION", "INCORRECTA", "COMUNA ERRADA", "CAMBIO DE DOMICILIO", "FALTAN DATOS"]):
-            message = "En llamada telefónica, el cliente rectificó sus datos para que la entrega suceda de forma más asertiva."
-            logger.info("Detectado caso: PROBLEMA DE ENDEREÇO")
-            return message
-        
-        # 5. CLIENTE AUSENTE
-        elif "CLIENTE AUSENTE" in form_text:
+        # Se não encontrou nenhuma incidência isolada, usa o texto completo
+        if not incidence:
+            incidence = form_text
+            logger.info("Nenhuma incidência isolada encontrada, usando texto completo.")
+            
+        # Verifica cada tipo de incidência
+        if any(phrase in incidence for phrase in ["CLIENTE AUSENTE", "NADIE EN CASA"]):
             message = "Entramos en contacto con el cliente y él se disculpó y mencionó que estará en casa para recibir el producto en este próximo intento."
-            logger.info("Detectado caso: CLIENTE AUSENTE")
+            logger.info("Resposta selecionada: CLIENTE AUSENTE")
             return message
         
-        # Se nenhuma condição for atendida
-        else:
-            logger.warning(f"Nenhuma condição conhecida foi detectada no texto.")
-            return ""
+        if "PROBLEMA COBRO" in incidence:
+            message = "En llamada telefónica, el cliente afirmó que estará con dinero suficiente para comprar el producto, por favor intenten nuevamente."
+            logger.info("Resposta selecionada: PROBLEMA COBRO")
+            return message
+        
+        if any(phrase in incidence for phrase in ["DIRECCIÓN INCORRECTA", "DIRECCION INCORRECTA", "FALTAN DATOS", "INUBICABLE", "COMUNA ERRADA", "CAMBIO DE DOMICILIO"]):
+            message = "En llamada telefónica, el cliente rectificó sus datos para que la entrega suceda de forma más asertiva."
+            logger.info("Resposta selecionada: PROBLEMA DE ENDEREÇO")
+            return message
+        
+        if any(phrase in incidence for phrase in ["RECHAZA", "RECHAZADA"]):
+            message = "En llamada telefónica, el cliente afirma que quiere el producto y mencionó que no fue buscado por la transportadora. Por lo tanto, por favor envíen el producto hasta el cliente."
+            logger.info("Resposta selecionada: RECHAZO DE ENTREGA")
+            return message
+        
+        logger.warning("Nenhuma condição conhecida encontrada na incidência")
+        return ""
         
     except Exception as e:
         logger.error(f"Erro ao gerar mensagem automática: {str(e)}")
@@ -2677,3 +2714,87 @@ if st.session_state.is_running:
     elif st.session_state.automation_step == 'complete':
         st.session_state.is_running = False
         st.success("Automação concluída com sucesso!")
+
+with tab2: # Remova esta linha se este for o script principal
+
+    # Filtros de data
+    col1, col2 = st.columns(2)
+    with col1:
+        default_start_date = datetime.date.today() - datetime.timedelta(days=30)
+        start_date = st.date_input("Data Inicial", value=default_start_date, key="report_start_date")
+    with col2:
+        default_end_date = datetime.date.today()
+        end_date = st.date_input("Data Final", value=default_end_date, key="report_end_date")
+
+    start_datetime = datetime.datetime.combine(start_date, datetime.datetime.min.time())
+    end_datetime = datetime.datetime.combine(end_date, datetime.datetime.max.time())
+
+    if st.button("Atualizar Relatório", key="update_report"):
+        start_date_str = start_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        end_date_str = end_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
+        st.success("Relatório atualizado!")
+
+    if 'filtered_data' not in st.session_state:
+        start_date_str = start_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        end_date_str = end_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
+
+    if 'filtered_data' in st.session_state and not st.session_state.filtered_data.empty:
+        df_original = st.session_state.filtered_data.copy()
+
+        # --- Preparação dos Dados ---
+        df_original['execution_date'] = pd.to_datetime(df_original['execution_date'])
+        # Converte tempo de segundos para minutos
+        df_original['Tempo (minutos)'] = df_original['execution_time'] / 60
+
+        # Cria cópia para exibição na tabela
+        display_df = df_original.copy()
+
+        # Formata a data para exibição amigável
+        display_df['Data'] = display_df['execution_date'].dt.strftime('%d/%m/%Y %H:%M')
+
+        # Renomeia colunas para português e seleciona/ordena para exibição
+        display_df.rename(columns={
+            'total_processed': 'Total Processado',
+            'successful': 'Sucessos',
+            'failed': 'Falhas',
+            # 'execution_time': 'Tempo (segundos)' # Removido
+            # 'Tempo (minutos)' já está no nome correto
+        }, inplace=True)
+
+        # Seleciona e ordena as colunas para exibição
+        # Usando a nova coluna de minutos
+        display_columns = ['Data', 'Total Processado', 'Sucessos', 'Falhas', 'Tempo (minutos)']
+        display_df = display_df[display_columns]
+        display_df = display_df.sort_values(by='Data', ascending=True)
+
+        # --- Cálculo dos Totais ---
+        total_processed = df_original['total_processed'].sum()
+        total_success = df_original['successful'].sum()
+        total_failed = df_original['failed'].sum()
+        # Calcula a média em minutos
+        avg_time_minutes = df_original['Tempo (minutos)'].mean() if not df_original['Tempo (minutos)'].empty else 0
+
+        # --- Adiciona a Linha de Total ao DataFrame de Exibição ---
+        total_row = pd.DataFrame({
+            'Data': ['Total'],
+            'Total Processado': [total_processed],
+            'Sucessos': [total_success],
+            'Falhas': [total_failed],
+            # Exibe a média formatada em minutos na linha total
+            'Tempo (minutos)': [f"{avg_time_minutes:.2f}"]
+        })
+
+        # Formata a coluna de minutos para 2 casas decimais ANTES de concatenar o total (que já é string formatada)
+        display_df['Tempo (minutos)'] = display_df['Tempo (minutos)'].map('{:.2f}'.format)
+
+        display_df_with_total = pd.concat([display_df, total_row], ignore_index=True)
+
+        # --- Exibição da Tabela ---
+        st.dataframe(display_df_with_total, width=800, hide_index=True)
+
+    elif 'filtered_data' in st.session_state and st.session_state.filtered_data.empty:
+        st.info("Não há dados de execução para o período selecionado.")
+    else:
+        st.info("Clique em 'Atualizar Relatório' para carregar os dados.")
