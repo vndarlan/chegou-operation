@@ -34,7 +34,7 @@ def create_screenshots_folder():
     return "screenshots"
 
 # Título e descrição
-st.markdown("<h1 style='text-align: center;'>Automação de Novelties Dropi Equador</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>🇨🇱</h1>", unsafe_allow_html=True)
 # Adicionar CSS após o título
 st.markdown("""
 <style>

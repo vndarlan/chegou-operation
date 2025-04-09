@@ -1,6 +1,12 @@
 import streamlit as st
 from streamlit.runtime.scriptrunner import RerunException, RerunData
 
+# Configuração global da página
+st.set_page_config( 
+    page_title="Chegou Operation", 
+    page_icon="assets/favicon.png"
+)
+
 # Função interna para forçar rerun (substitui st.experimental_rerun())
 def force_rerun():
     raise RerunException(RerunData(None))
@@ -13,7 +19,7 @@ USERS = {
 
 def login_page():
     """Página de Login."""
-    st.title("GC Operacional")
+    st.title("Chegou Operation")
     st.subheader("Faça seu login")
 
     email = st.text_input("Email")
@@ -52,24 +58,17 @@ def main():
     """, unsafe_allow_html=True)
     
     # Se NÃO estiver logado, exibe apenas a página de login
-    if not st.session_state["logged_in"]:
-        # Cria o título aqui
-        st.sidebar.header("ChegouOperation")
-        st.sidebar.markdown("---")
-        
+    if not st.session_state["logged_in"]:     
         pages = [st.Page(login_page, title="Login", icon=":material/lock:")]
         pg = st.navigation(pages, position="sidebar", expanded=False)
         pg.run()
-    else:
-        # Cria o título aqui
-        st.sidebar.header("ChegouOperation")
-        st.sidebar.markdown("---")
-        
+    else:     
         # Define páginas de acordo com o cargo
         if st.session_state["cargo"] == "Administrador":
             pages = {
                 "Principal": [
                     st.Page("principal/home.py", title="Home", icon=":material/home:"),
+                    st.Page("principal/tutoriais.py", title="Tutoriais", icon=":material/home:"),
                 ],
                 "Novelties": [
                     st.Page("novelties/mexico.py",   title="México",   icon=":material/flag:"),
