@@ -23,7 +23,9 @@ try:
     from db_connection import is_railway
 except ImportError:
     def is_railway():
-        return "RAILWAY_ENVIRONMENT" in os.environ
+        return os.environ.get("RAILWAY_ENVIRONMENT") == "true" or \
+            os.environ.get("RAILWAY_PROJECT_ID") is not None or \
+            os.environ.get("RAILWAY_SERVICE_ID") is not None
 
 st.markdown("<h1 style='text-align: center;'>🇨🇴</h1>", unsafe_allow_html=True)
 # Adicione o CSS aqui
@@ -47,21 +49,30 @@ def check_dependencies():
         st.sidebar.info(f"Sistema Operacional: {system}")
         
         # Verificar se o Chrome está instalado
-        if system == "Windows":
+        chrome_installed = False
+        
+        if is_railway():
+            # No Railway, assumimos que o Chrome está instalado corretamente pelo Dockerfile
+            chrome_installed = True
+            st.sidebar.success("✅ Google Chrome detectado (Railway)")
+        elif system == "Windows":
             chrome_path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
             chrome_path_alt = "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
             if os.path.exists(chrome_path) or os.path.exists(chrome_path_alt):
+                chrome_installed = True
                 st.sidebar.success("✅ Google Chrome detectado")
             else:
                 st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
         elif system == "Darwin":  # macOS
             if os.path.exists("/Applications/Google Chrome.app"):
+                chrome_installed = True
                 st.sidebar.success("✅ Google Chrome detectado")
             else:
                 st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
         elif system == "Linux":
             chrome_exists = os.system("which google-chrome > /dev/null 2>&1") == 0
             if chrome_exists:
+                chrome_installed = True
                 st.sidebar.success("✅ Google Chrome detectado")
             else:
                 st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
@@ -81,7 +92,7 @@ def check_dependencies():
         else:
             st.sidebar.success("✅ Todos os módulos Python necessários estão instalados")
         
-        return len(missing_modules) == 0
+        return chrome_installed and len(missing_modules) == 0
     except Exception as e:
         st.sidebar.error(f"Erro ao verificar dependências: {str(e)}")
         return False
@@ -325,35 +336,65 @@ def setup_driver():
     chrome_options = Options()
     
     # No Railway sempre use headless
-    if is_railway() or st.session_state.use_headless:
-        logger.info("Modo headless ativado")
+    if is_railway():
+        logger.info("Modo headless ativado (Railway)")
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-setuid-sandbox")
+        # Usa um tamanho de janela fixo para garantir que elementos sejam visíveis
+        chrome_options.add_argument("--window-size=1920,1080")
+        # User agent para evitar detecção de headless
+        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     else:
+        # Localmente, permite uso visual do navegador
         logger.info("Modo headless desativado - navegador será visível")
-    
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--disable-extensions")
     
     try:
-        if is_railway():
-            # No Railway, usa o Chrome já instalado pelo Dockerfile
-            logger.info("Inicializando o driver Chrome no Railway...")
-            service = Service()
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-        else:
-            # Localmente, usa o webdriver_manager
-            logger.info("Inicializando o driver Chrome localmente...")
-            driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()),
-                options=chrome_options
-            )
-            
-        logger.info("Driver do Chrome iniciado com sucesso")
-        st.session_state.driver = driver
-        return True
+        # Mecanismo de tentativas para maior confiabilidade
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                logger.info(f"Tentativa {attempt + 1} de {max_attempts} para iniciar o Chrome")
+                
+                if is_railway():
+                    # No Railway, usa o Chrome já instalado pelo Dockerfile
+                    logger.info("Inicializando o driver Chrome no Railway...")
+                    service = Service()
+                    driver = webdriver.Chrome(service=service, options=chrome_options)
+                else:
+                    # Localmente, usa o webdriver_manager
+                    logger.info("Inicializando o driver Chrome localmente...")
+                    driver = webdriver.Chrome(
+                        service=Service(ChromeDriverManager().install()),
+                        options=chrome_options
+                    )
+                
+                # Verifica se o browser está funcionando com uma página de teste
+                driver.get("about:blank")
+                logger.info("Driver do Chrome iniciado com sucesso")
+                
+                # Define timeouts para operações
+                driver.set_page_load_timeout(60)
+                driver.implicitly_wait(10)
+                
+                st.session_state.driver = driver
+                return True
+            except Exception as e:
+                logger.error(f"Erro na tentativa {attempt + 1}: {str(e)}")
+                if attempt < max_attempts - 1:
+                    # Aguarda antes de tentar novamente
+                    logger.info("Aguardando 5 segundos antes de tentar novamente...")
+                    time.sleep(5)
+                else:
+                    # Registra o erro completo na última tentativa
+                    logger.error(f"Falha ao iniciar Chrome após {max_attempts} tentativas")
+                    logger.error(traceback.format_exc())
+                    raise
     except Exception as e:
         logger.error(f"Erro ao configurar o driver Chrome: {str(e)}")
         logger.error(traceback.format_exc())

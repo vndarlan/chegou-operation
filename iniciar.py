@@ -1,5 +1,25 @@
 import streamlit as st
 from streamlit.runtime.scriptrunner import RerunException, RerunData
+import os
+import traceback
+
+# Inicialização segura do state - evita erro TypeError com query_string
+if 'query_params' not in st.session_state:
+    st.session_state['query_params'] = {}
+
+# Previne quaisquer erros inesperados com session_state
+try:
+    for key in ['logged_in', 'cargo']:
+        if key not in st.session_state:
+            st.session_state[key] = None
+except Exception as e:
+    print(f"Erro ao inicializar session_state: {str(e)}")
+    traceback.print_exc()
+
+# Função para verificar se estamos no Railway
+def is_railway():
+    """Verifica se a aplicação está rodando no Railway"""
+    return os.environ.get('RAILWAY_ENVIRONMENT') is not None
 
 # Configuração global da página
 st.set_page_config( 
