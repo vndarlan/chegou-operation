@@ -29,6 +29,8 @@ except ImportError:
     
 # Identifica o país atual
 CURRENT_COUNTRY = "Colombia"  # Definir constante para o país atual
+EMAIL_CREDENTIALS = "viniciuschegouoperacional@gmail.com"
+PASSWORD_CREDENTIALS = "123456cC"
 
 st.markdown("<h1 style='text-align: center;'>🇨🇴</h1>", unsafe_allow_html=True)
 # Adicione o CSS aqui
@@ -168,7 +170,6 @@ if dependencies_ok and not st.session_state.has_chromedriver:
                 # Tenta instalar o ChromeDriver
                 driver_path = ChromeDriverManager().install()
                 st.session_state.has_chromedriver = True
-                st.sidebar.success(f"✅ ChromeDriver instalado em: {driver_path}")
             except Exception as e:
                 st.sidebar.error(f"❌ Erro ao instalar ChromeDriver: {str(e)}")
                 st.sidebar.info("Por favor, instale manualmente o ChromeDriver compatível com sua versão do Chrome")
@@ -201,149 +202,6 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-tab1, tab2 = st.tabs(["Execução Manual", "Relatório"])
-with tab1:
-    # Interface do usuário - agora em linhas em vez de colunas
-    st.subheader("Execução Manual")
-
-# Define as credenciais diretamente no código (não visíveis no UI)
-# Use suas credenciais reais aqui
-EMAIL_CREDENTIALS = "viniciuschegouoperacional@gmail.com"
-PASSWORD_CREDENTIALS = "123456cC"
-
-# Interface do usuário com layout reformulado
-with st.form("automation_form"):
-    # Botão para iniciar automação centralizado (sem borda grande)
-    submit_button = st.form_submit_button("Iniciar Automação", use_container_width=True)
-    
-    # Aviso de dependências abaixo do botão se necessário
-    if not dependencies_ok or not st.session_state.has_chromedriver:
-        st.warning("⚠️ Verificação de dependências falhou. Veja o painel lateral.")
-    
-    if submit_button:
-        if st.session_state.is_running:
-            st.warning("Automação já está em execução.")
-        elif not dependencies_ok:
-            st.error("Não é possível iniciar a automação. Verifique as dependências no painel lateral.")
-        elif not st.session_state.has_chromedriver:
-            st.error("ChromeDriver não instalado. Verifique o painel lateral.")
-        else:
-            # Inicia a automação diretamente (sem thread)
-            st.session_state.is_running = True
-            st.session_state.log_output = StringIO()  # Limpa o log anterior
-            st.session_state.log_messages = []  # Limpa as mensagens de log
-            st.session_state.progress = 0
-            st.session_state.total_items = 0
-            st.session_state.processed_items = 0
-            st.session_state.success_count = 0
-            st.session_state.failed_count = 0
-            st.session_state.report = None
-            st.session_state.automation_step = 'setup'
-            st.session_state.current_row_index = 0
-            st.session_state.rows = []
-            st.session_state.failed_items = []
-            st.session_state.closed_tabs = 0
-            st.session_state.found_pagination = False
-            st.session_state.email = EMAIL_CREDENTIALS
-            st.session_state.password = PASSWORD_CREDENTIALS
-            st.session_state.use_headless = use_headless
-            st.success("Iniciando automação... Aguarde.")
-            st.rerun()
-
-# Status em uma linha própria (agora fora do formulário)
-if st.session_state.is_running:
-    st.info("✅ Automação em execução...")
-    
-    # Botão para parar a automação
-    if st.button("Parar Automação"):
-        st.session_state.is_running = False
-        
-        # Fecha o navegador se estiver aberto
-        if st.session_state.driver:
-            try:
-                st.session_state.driver.quit()
-            except:
-                pass
-            st.session_state.driver = None
-            
-        st.warning("Automação interrompida pelo usuário.")
-        st.rerun()
-else:
-    if st.session_state.report:
-        st.success("✅ Automação concluída!")
-    elif st.session_state.processed_items > 0:
-        st.warning("⚠️ Automação interrompida.")
-    else:
-        st.info("⏸️ Aguardando início da automação.")
-
-# Métricas com bordas individuais
-st.markdown("""
-<style>
-    .metric-container {
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        padding: 10px;
-        margin: 5px;
-        text-align: center;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-cols = st.columns(3)
-with cols[0]:
-    st.markdown(
-        f'<div class="metric-container"><p>Novelties Processadas</p><h1>{st.session_state.processed_items}</h1></div>', 
-        unsafe_allow_html=True
-    )
-with cols[1]:
-    st.markdown(
-        f'<div class="metric-container"><p>Sucesso</p><h1>{st.session_state.success_count}</h1></div>', 
-        unsafe_allow_html=True
-    )
-with cols[2]:
-    st.markdown(
-        f'<div class="metric-container"><p>Falhas</p><h1>{st.session_state.failed_count}</h1></div>', 
-        unsafe_allow_html=True
-    )
-
-# Barra de progresso
-if st.session_state.total_items > 0:
-    st.progress(st.session_state.progress)
-    st.caption(f"Progresso: {st.session_state.processed_items}/{st.session_state.total_items} items")
-
-# Linha divisória 
-st.markdown("<hr style='margin: 20px 0; border-top: 1px solid #ddd;'>", unsafe_allow_html=True)
-
-# Toggle para mostrar/ocultar o log completo
-show_log = st.checkbox("Mostrar Log Completo", value=st.session_state.show_log)
-st.session_state.show_log = show_log
-
-# Exibe o log completo apenas se o checkbox estiver marcado
-if st.session_state.show_log:
-    log_container = st.container()
-    log_container.text_area("Log Completo", value=st.session_state.log_output.getvalue(), height=400)
-
-# Se houver um relatório, exibe-o
-if st.session_state.report and not st.session_state.is_running:
-    st.subheader("Relatório de Execução")
-    
-    report = st.session_state.report
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Processado", report.get("total_processados", 0))
-    with col2:
-        st.metric("Total Falhas", report.get("total_falhas", 0))
-    with col3:
-        st.metric("Guias Fechadas", report.get("guias_fechadas", 0))
-    
-    # Se houver falhas, exibe os detalhes
-    if report.get("total_falhas", 0) > 0:
-        st.subheader("Detalhes das Falhas")
-        
-        # Cria um DataFrame com os itens que falharam
-        failures_df = pd.DataFrame(report.get("itens_com_falha", []))
-        st.dataframe(failures_df)
 
 # Funções de automação (adaptadas para serem executadas passo a passo)
 def setup_driver():
@@ -2828,8 +2686,112 @@ if st.session_state.is_running:
         st.session_state.is_running = False
         st.success("Automação concluída com sucesso!")
 
-def show_report_tab():
-    with tab2:
+def show_execution_tab(tab):
+    with tab:
+        st.subheader("Execução Manual")
+
+        # Interface do usuário com layout reformulado
+        with st.form("automation_form"):
+            # Botão para iniciar automação centralizado
+            submit_button = st.form_submit_button("Iniciar Automação", use_container_width=True)
+            
+            # Aviso de dependências abaixo do botão se necessário
+            if not dependencies_ok or not st.session_state.has_chromedriver:
+                st.warning("⚠️ Verificação de dependências falhou. Veja o painel lateral.")
+            
+            if submit_button:
+                if st.session_state.is_running:
+                    st.warning("Automação já está em execução.")
+                elif not dependencies_ok:
+                    st.error("Não é possível iniciar a automação. Verifique as dependências no painel lateral.")
+                elif not st.session_state.has_chromedriver:
+                    st.error("ChromeDriver não instalado. Verifique o painel lateral.")
+                else:
+                    # Inicia a automação
+                    st.session_state.is_running = True
+                    st.session_state.log_output = StringIO()
+                    st.session_state.log_messages = []
+                    st.session_state.progress = 0
+                    st.session_state.total_items = 0
+                    st.session_state.processed_items = 0
+                    st.session_state.success_count = 0
+                    st.session_state.failed_count = 0
+                    st.session_state.report = None
+                    st.session_state.automation_step = 'setup'
+                    st.session_state.current_row_index = 0
+                    st.session_state.rows = []
+                    st.session_state.failed_items = []
+                    st.session_state.closed_tabs = 0
+                    st.session_state.found_pagination = False
+                    st.session_state.email = EMAIL_CREDENTIALS
+                    st.session_state.password = PASSWORD_CREDENTIALS
+                    st.session_state.use_headless = use_headless
+                    st.success("Iniciando automação... Aguarde.")
+                    st.rerun()
+
+        # Status em uma linha própria (agora fora do formulário)
+        if st.session_state.is_running:
+            st.info("✅ Automação em execução...")
+            
+            # Botão para parar a automação
+            if st.button("Parar Automação"):
+                st.session_state.is_running = False
+                
+                # Fecha o navegador se estiver aberto
+                if st.session_state.driver:
+                    try:
+                        st.session_state.driver.quit()
+                    except:
+                        pass
+                    st.session_state.driver = None
+                    
+                st.warning("Automação interrompida pelo usuário.")
+                st.rerun()
+        else:
+            if st.session_state.report:
+                st.success("✅ Automação concluída!")
+            elif st.session_state.processed_items > 0:
+                st.warning("⚠️ Automação interrompida.")
+            else:
+                st.info("⏸️ Aguardando início da automação.")
+
+        # Métricas
+        cols = st.columns(3)
+        with cols[0]:
+            st.markdown(
+                f'<div class="metric-container"><p>Novelties Processadas</p><h1>{st.session_state.processed_items}</h1></div>', 
+                unsafe_allow_html=True
+            )
+        with cols[1]:
+            st.markdown(
+                f'<div class="metric-container"><p>Sucesso</p><h1>{st.session_state.success_count}</h1></div>', 
+                unsafe_allow_html=True
+            )
+        with cols[2]:
+            st.markdown(
+                f'<div class="metric-container"><p>Falhas</p><h1>{st.session_state.failed_count}</h1></div>', 
+                unsafe_allow_html=True
+            )
+
+        # Barra de progresso
+        if st.session_state.total_items > 0:
+            st.progress(st.session_state.progress)
+            st.caption(f"Progresso: {st.session_state.processed_items}/{st.session_state.total_items} items")
+
+        # Linha divisória 
+        st.markdown("<hr style='margin: 20px 0; border-top: 1px solid #ddd;'>", unsafe_allow_html=True)
+
+        # Toggle para mostrar/ocultar o log completo
+        show_log = st.checkbox("Mostrar Log Completo", value=st.session_state.show_log)
+        st.session_state.show_log = show_log
+
+        # Exibe o log completo apenas se o checkbox estiver marcado
+        if st.session_state.show_log:
+            log_container = st.container()
+            log_container.text_area("Log Completo", value=st.session_state.log_output.getvalue(), height=400)
+
+def show_report_tab(tab):
+    with tab:
         st.subheader(f"Relatório de Execuções - {CURRENT_COUNTRY}")
         
         # Filtros de data
@@ -2895,4 +2857,7 @@ def show_report_tab():
             with stats_cols[3]:
                 st.metric("Tempo Médio (min)", f"{avg_time:.2f}")
 
-show_report_tab()
+tab1, tab2 = st.tabs(["Execução Manual", "Relatório"])
+
+show_execution_tab(tab1)
+show_report_tab(tab2)
