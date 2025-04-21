@@ -23,14 +23,7 @@ try:
     from db_connection import is_railway
 except ImportError:
     def is_railway():
-        return os.environ.get("RAILWAY_ENVIRONMENT") == "true" or \
-            os.environ.get("RAILWAY_PROJECT_ID") is not None or \
-            os.environ.get("RAILWAY_SERVICE_ID") is not None
-    
-# Identifica o país atual
-CURRENT_COUNTRY = "Colombia"  # Definir constante para o país atual
-EMAIL_CREDENTIALS = "viniciuschegouoperacional@gmail.com"
-PASSWORD_CREDENTIALS = "123456cC"
+        return "RAILWAY_ENVIRONMENT" in os.environ
 
 st.markdown("<h1 style='text-align: center;'>🇨🇴</h1>", unsafe_allow_html=True)
 # Adicione o CSS aqui
@@ -48,68 +41,49 @@ st.markdown("""
 """, unsafe_allow_html=True)
 # Verificar e instalar dependências
 def check_dependencies():
-    """Verificar e instalar dependências - oculto no Railway"""
     try:
-        # Se estiver no Railway, não mostra nada na interface
-        if is_railway():
-            # Apenas verifica silenciosamente
-            required_modules = ["selenium", "webdriver_manager", "pandas"]
-            missing_modules = []
-            for module in required_modules:
-                try:
-                    __import__(module)
-                except ImportError:
-                    missing_modules.append(module)
-            
-            # Retorna True se tudo estiver ok
-            return len(missing_modules) == 0
+        # Verificar o sistema operacional
+        system = platform.system()
+        st.sidebar.info(f"Sistema Operacional: {system}")
         
-        # Se for ambiente local, mostra as verificações normalmente
-        else:
-            # Verificar o sistema operacional
-            system = platform.system()
-            st.sidebar.info(f"Sistema Operacional: {system}")
-            
-            # Verificar se o Chrome está instalado
-            if system == "Windows":
-                chrome_path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-                chrome_path_alt = "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
-                if os.path.exists(chrome_path) or os.path.exists(chrome_path_alt):
-                    st.sidebar.success("✅ Google Chrome detectado")
-                else:
-                    st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
-            elif system == "Darwin":  # macOS
-                if os.path.exists("/Applications/Google Chrome.app"):
-                    st.sidebar.success("✅ Google Chrome detectado")
-                else:
-                    st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
-            elif system == "Linux":
-                chrome_exists = os.system("which google-chrome > /dev/null 2>&1") == 0
-                if chrome_exists:
-                    st.sidebar.success("✅ Google Chrome detectado")
-                else:
-                    st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
-            
-            # Verificar módulos Python
-            required_modules = ["selenium", "webdriver_manager", "pandas"]
-            missing_modules = []
-            for module in required_modules:
-                try:
-                    __import__(module)
-                except ImportError:
-                    missing_modules.append(module)
-            
-            if missing_modules:
-                st.sidebar.error(f"❌ Módulos faltando: {', '.join(missing_modules)}")
-                st.sidebar.info("Execute: pip install " + " ".join(missing_modules))
+        # Verificar se o Chrome está instalado
+        if system == "Windows":
+            chrome_path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+            chrome_path_alt = "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+            if os.path.exists(chrome_path) or os.path.exists(chrome_path_alt):
+                st.sidebar.success("✅ Google Chrome detectado")
             else:
-                st.sidebar.success("✅ Todos os módulos Python necessários estão instalados")
-            
-            return len(missing_modules) == 0
+                st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
+        elif system == "Darwin":  # macOS
+            if os.path.exists("/Applications/Google Chrome.app"):
+                st.sidebar.success("✅ Google Chrome detectado")
+            else:
+                st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
+        elif system == "Linux":
+            chrome_exists = os.system("which google-chrome > /dev/null 2>&1") == 0
+            if chrome_exists:
+                st.sidebar.success("✅ Google Chrome detectado")
+            else:
+                st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
+        
+        # Verificar módulos Python
+        required_modules = ["selenium", "webdriver_manager", "pandas"]
+        missing_modules = []
+        for module in required_modules:
+            try:
+                __import__(module)
+            except ImportError:
+                missing_modules.append(module)
+        
+        if missing_modules:
+            st.sidebar.error(f"❌ Módulos faltando: {', '.join(missing_modules)}")
+            st.sidebar.info("Execute: pip install " + " ".join(missing_modules))
+        else:
+            st.sidebar.success("✅ Todos os módulos Python necessários estão instalados")
+        
+        return len(missing_modules) == 0
     except Exception as e:
-        # No Railway, não mostra erros na interface
-        if not is_railway():
-            st.sidebar.error(f"Erro ao verificar dependências: {str(e)}")
+        st.sidebar.error(f"Erro ao verificar dependências: {str(e)}")
         return False
 
 # Inicializa o estado da sessão para armazenar logs
@@ -150,16 +124,12 @@ if 'found_pagination' not in st.session_state:
 if 'show_log' not in st.session_state:
     st.session_state.show_log = False
 
-# Sidebar com informações - apenas em ambiente local
-if not is_railway():
-    st.sidebar.title("Configuração")
-    use_headless = st.sidebar.checkbox("Modo Headless", value=False, 
-                                help="Se marcado, o navegador não será exibido na tela. Desmarque para depuração.")
-else:
-    # No Railway, headless é sempre True, mas não mostramos na interface
-    use_headless = True
+# Sidebar com informações
+st.sidebar.title("Configuração")
+use_headless = st.sidebar.checkbox("Modo Headless", value=False, 
+                               help="Se marcado, o navegador não será exibido na tela. Desmarque para depuração.")
 
-# Verificar dependências silenciosamente no Railway
+# Verificar dependências
 dependencies_ok = check_dependencies()
 
 # Tentar instalar o ChromeDriver
@@ -170,6 +140,7 @@ if dependencies_ok and not st.session_state.has_chromedriver:
                 # Tenta instalar o ChromeDriver
                 driver_path = ChromeDriverManager().install()
                 st.session_state.has_chromedriver = True
+                st.sidebar.success(f"✅ ChromeDriver instalado em: {driver_path}")
             except Exception as e:
                 st.sidebar.error(f"❌ Erro ao instalar ChromeDriver: {str(e)}")
                 st.sidebar.info("Por favor, instale manualmente o ChromeDriver compatível com sua versão do Chrome")
@@ -202,6 +173,149 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+tab1, tab2 = st.tabs(["Execução Manual", "Relatório"])
+with tab1:
+    # Interface do usuário - agora em linhas em vez de colunas
+    st.subheader("Execução Manual")
+
+# Define as credenciais diretamente no código (não visíveis no UI)
+# Use suas credenciais reais aqui
+EMAIL_CREDENTIALS = "viniciuschegouoperacional@gmail.com"
+PASSWORD_CREDENTIALS = "123456cC"
+
+# Interface do usuário com layout reformulado
+with st.form("automation_form"):
+    # Botão para iniciar automação centralizado (sem borda grande)
+    submit_button = st.form_submit_button("Iniciar Automação", use_container_width=True)
+    
+    # Aviso de dependências abaixo do botão se necessário
+    if not dependencies_ok or not st.session_state.has_chromedriver:
+        st.warning("⚠️ Verificação de dependências falhou. Veja o painel lateral.")
+    
+    if submit_button:
+        if st.session_state.is_running:
+            st.warning("Automação já está em execução.")
+        elif not dependencies_ok:
+            st.error("Não é possível iniciar a automação. Verifique as dependências no painel lateral.")
+        elif not st.session_state.has_chromedriver:
+            st.error("ChromeDriver não instalado. Verifique o painel lateral.")
+        else:
+            # Inicia a automação diretamente (sem thread)
+            st.session_state.is_running = True
+            st.session_state.log_output = StringIO()  # Limpa o log anterior
+            st.session_state.log_messages = []  # Limpa as mensagens de log
+            st.session_state.progress = 0
+            st.session_state.total_items = 0
+            st.session_state.processed_items = 0
+            st.session_state.success_count = 0
+            st.session_state.failed_count = 0
+            st.session_state.report = None
+            st.session_state.automation_step = 'setup'
+            st.session_state.current_row_index = 0
+            st.session_state.rows = []
+            st.session_state.failed_items = []
+            st.session_state.closed_tabs = 0
+            st.session_state.found_pagination = False
+            st.session_state.email = EMAIL_CREDENTIALS
+            st.session_state.password = PASSWORD_CREDENTIALS
+            st.session_state.use_headless = use_headless
+            st.success("Iniciando automação... Aguarde.")
+            st.rerun()
+
+# Status em uma linha própria (agora fora do formulário)
+if st.session_state.is_running:
+    st.info("✅ Automação em execução...")
+    
+    # Botão para parar a automação
+    if st.button("Parar Automação"):
+        st.session_state.is_running = False
+        
+        # Fecha o navegador se estiver aberto
+        if st.session_state.driver:
+            try:
+                st.session_state.driver.quit()
+            except:
+                pass
+            st.session_state.driver = None
+            
+        st.warning("Automação interrompida pelo usuário.")
+        st.rerun()
+else:
+    if st.session_state.report:
+        st.success("✅ Automação concluída!")
+    elif st.session_state.processed_items > 0:
+        st.warning("⚠️ Automação interrompida.")
+    else:
+        st.info("⏸️ Aguardando início da automação.")
+
+# Métricas com bordas individuais
+st.markdown("""
+<style>
+    .metric-container {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 10px;
+        margin: 5px;
+        text-align: center;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+cols = st.columns(3)
+with cols[0]:
+    st.markdown(
+        f'<div class="metric-container"><p>Novelties Processadas</p><h1>{st.session_state.processed_items}</h1></div>', 
+        unsafe_allow_html=True
+    )
+with cols[1]:
+    st.markdown(
+        f'<div class="metric-container"><p>Sucesso</p><h1>{st.session_state.success_count}</h1></div>', 
+        unsafe_allow_html=True
+    )
+with cols[2]:
+    st.markdown(
+        f'<div class="metric-container"><p>Falhas</p><h1>{st.session_state.failed_count}</h1></div>', 
+        unsafe_allow_html=True
+    )
+
+# Barra de progresso
+if st.session_state.total_items > 0:
+    st.progress(st.session_state.progress)
+    st.caption(f"Progresso: {st.session_state.processed_items}/{st.session_state.total_items} items")
+
+# Linha divisória 
+st.markdown("<hr style='margin: 20px 0; border-top: 1px solid #ddd;'>", unsafe_allow_html=True)
+
+# Toggle para mostrar/ocultar o log completo
+show_log = st.checkbox("Mostrar Log Completo", value=st.session_state.show_log)
+st.session_state.show_log = show_log
+
+# Exibe o log completo apenas se o checkbox estiver marcado
+if st.session_state.show_log:
+    log_container = st.container()
+    log_container.text_area("Log Completo", value=st.session_state.log_output.getvalue(), height=400)
+
+# Se houver um relatório, exibe-o
+if st.session_state.report and not st.session_state.is_running:
+    st.subheader("Relatório de Execução")
+    
+    report = st.session_state.report
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Processado", report.get("total_processados", 0))
+    with col2:
+        st.metric("Total Falhas", report.get("total_falhas", 0))
+    with col3:
+        st.metric("Guias Fechadas", report.get("guias_fechadas", 0))
+    
+    # Se houver falhas, exibe os detalhes
+    if report.get("total_falhas", 0) > 0:
+        st.subheader("Detalhes das Falhas")
+        
+        # Cria um DataFrame com os itens que falharam
+        failures_df = pd.DataFrame(report.get("itens_com_falha", []))
+        st.dataframe(failures_df)
 
 # Funções de automação (adaptadas para serem executadas passo a passo)
 def setup_driver():
@@ -211,65 +325,35 @@ def setup_driver():
     chrome_options = Options()
     
     # No Railway sempre use headless
-    if is_railway():
-        logger.info("Modo headless ativado (Railway)")
+    if is_railway() or st.session_state.use_headless:
+        logger.info("Modo headless ativado")
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-extensions")
-        chrome_options.add_argument("--disable-setuid-sandbox")
-        # Usa um tamanho de janela fixo para garantir que elementos sejam visíveis
-        chrome_options.add_argument("--window-size=1920,1080")
-        # User agent para evitar detecção de headless
-        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     else:
-        # Localmente, permite uso visual do navegador
         logger.info("Modo headless desativado - navegador será visível")
-        chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--disable-extensions")
+    
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--disable-extensions")
     
     try:
-        # Mecanismo de tentativas para maior confiabilidade
-        max_attempts = 3
-        for attempt in range(max_attempts):
-            try:
-                logger.info(f"Tentativa {attempt + 1} de {max_attempts} para iniciar o Chrome")
-                
-                if is_railway():
-                    # No Railway, usa o Chrome já instalado pelo Dockerfile
-                    logger.info("Inicializando o driver Chrome no Railway...")
-                    service = Service()
-                    driver = webdriver.Chrome(service=service, options=chrome_options)
-                else:
-                    # Localmente, usa o webdriver_manager
-                    logger.info("Inicializando o driver Chrome localmente...")
-                    driver = webdriver.Chrome(
-                        service=Service(ChromeDriverManager().install()),
-                        options=chrome_options
-                    )
-                
-                # Verifica se o browser está funcionando com uma página de teste
-                driver.get("about:blank")
-                logger.info("Driver do Chrome iniciado com sucesso")
-                
-                # Define timeouts para operações
-                driver.set_page_load_timeout(60)
-                driver.implicitly_wait(10)
-                
-                st.session_state.driver = driver
-                return True
-            except Exception as e:
-                logger.error(f"Erro na tentativa {attempt + 1}: {str(e)}")
-                if attempt < max_attempts - 1:
-                    # Aguarda antes de tentar novamente
-                    logger.info("Aguardando 5 segundos antes de tentar novamente...")
-                    time.sleep(5)
-                else:
-                    # Registra o erro completo na última tentativa
-                    logger.error(f"Falha ao iniciar Chrome após {max_attempts} tentativas")
-                    logger.error(traceback.format_exc())
-                    raise
+        if is_railway():
+            # No Railway, usa o Chrome já instalado pelo Dockerfile
+            logger.info("Inicializando o driver Chrome no Railway...")
+            service = Service()
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        else:
+            # Localmente, usa o webdriver_manager
+            logger.info("Inicializando o driver Chrome localmente...")
+            driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()),
+                options=chrome_options
+            )
+            
+        logger.info("Driver do Chrome iniciado com sucesso")
+        st.session_state.driver = driver
+        return True
     except Exception as e:
         logger.error(f"Erro ao configurar o driver Chrome: {str(e)}")
         logger.error(traceback.format_exc())
@@ -2593,25 +2677,17 @@ def handle_error(row, row_id):
     except Exception as e:
         logger.error(f"Erro ao tratar erro para novelty {row_id}: {str(e)}")
 
-# Função modificada para gerar o relatório
 def generate_report():
     """Gera um relatório da execução."""
-    
-    # Adiciona data e hora à execução
-    execution_time = time.time() - st.session_state.get('start_time', 0)
-    
     report = {
-        "execution_date": datetime.datetime.now(),
         "total_processados": st.session_state.success_count,
         "total_falhas": len(st.session_state.failed_items),
         "itens_com_falha": st.session_state.failed_items,
         "guias_fechadas": st.session_state.closed_tabs,
-        "encontrou_paginacao": st.session_state.found_pagination,
-        "execution_time": execution_time  # Tempo em segundos
+        "encontrou_paginacao": st.session_state.found_pagination
     }
     
     logger.info("======= RELATÓRIO DE EXECUÇÃO =======")
-    logger.info(f"País: {CURRENT_COUNTRY}")
     logger.info(f"Total de novelties processadas com sucesso: {report['total_processados']}")
     logger.info(f"Total de novelties com falha: {report['total_falhas']}")
     logger.info(f"Total de guias fechadas durante o processo: {report['guias_fechadas']}")
@@ -2623,14 +2699,6 @@ def generate_report():
             logger.info(f"  - ID: {item['id']}, Erro: {item['error']}")
             
     logger.info("=====================================")
-    
-    # Salva o relatório no banco de dados com o país
-    try:
-        from db_connection import save_execution_results
-        save_execution_results(report, CURRENT_COUNTRY)
-        logger.info("Relatório salvo no banco de dados com sucesso!")
-    except Exception as e:
-        logger.error(f"Erro ao salvar relatório no banco de dados: {str(e)}")
     
     st.session_state.report = report
 
@@ -2686,178 +2754,63 @@ if st.session_state.is_running:
         st.session_state.is_running = False
         st.success("Automação concluída com sucesso!")
 
-def show_execution_tab(tab):
-    with tab:
-        st.subheader("Execução Manual")
-
-        # Interface do usuário com layout reformulado
-        with st.form("automation_form"):
-            # Botão para iniciar automação centralizado
-            submit_button = st.form_submit_button("Iniciar Automação", use_container_width=True)
-            
-            # Aviso de dependências abaixo do botão se necessário
-            if not dependencies_ok or not st.session_state.has_chromedriver:
-                st.warning("⚠️ Verificação de dependências falhou. Veja o painel lateral.")
-            
-            if submit_button:
-                if st.session_state.is_running:
-                    st.warning("Automação já está em execução.")
-                elif not dependencies_ok:
-                    st.error("Não é possível iniciar a automação. Verifique as dependências no painel lateral.")
-                elif not st.session_state.has_chromedriver:
-                    st.error("ChromeDriver não instalado. Verifique o painel lateral.")
-                else:
-                    # Inicia a automação
-                    st.session_state.is_running = True
-                    st.session_state.log_output = StringIO()
-                    st.session_state.log_messages = []
-                    st.session_state.progress = 0
-                    st.session_state.total_items = 0
-                    st.session_state.processed_items = 0
-                    st.session_state.success_count = 0
-                    st.session_state.failed_count = 0
-                    st.session_state.report = None
-                    st.session_state.automation_step = 'setup'
-                    st.session_state.current_row_index = 0
-                    st.session_state.rows = []
-                    st.session_state.failed_items = []
-                    st.session_state.closed_tabs = 0
-                    st.session_state.found_pagination = False
-                    st.session_state.email = EMAIL_CREDENTIALS
-                    st.session_state.password = PASSWORD_CREDENTIALS
-                    st.session_state.use_headless = use_headless
-                    st.success("Iniciando automação... Aguarde.")
-                    st.rerun()
-
-        # Status em uma linha própria (agora fora do formulário)
-        if st.session_state.is_running:
-            st.info("✅ Automação em execução...")
-            
-            # Botão para parar a automação
-            if st.button("Parar Automação"):
-                st.session_state.is_running = False
-                
-                # Fecha o navegador se estiver aberto
-                if st.session_state.driver:
-                    try:
-                        st.session_state.driver.quit()
-                    except:
-                        pass
-                    st.session_state.driver = None
-                    
-                st.warning("Automação interrompida pelo usuário.")
-                st.rerun()
-        else:
-            if st.session_state.report:
-                st.success("✅ Automação concluída!")
-            elif st.session_state.processed_items > 0:
-                st.warning("⚠️ Automação interrompida.")
-            else:
-                st.info("⏸️ Aguardando início da automação.")
-
+with tab2:
+    st.subheader("Relatório de Execuções")
+    
+    # Filtros de data
+    col1, col2 = st.columns(2)
+    with col1:
+        default_start_date = datetime.datetime.now() - datetime.timedelta(days=30)
+        start_date = st.date_input("Data Inicial", value=default_start_date)
+    with col2:
+        end_date = st.date_input("Data Final", value=datetime.datetime.now())
+    
+    # Converte as datas para o formato string YYYY-MM-DD
+    start_date_str = start_date.strftime("%Y-%m-%d")
+    end_date_str = end_date.strftime("%Y-%m-%d") + " 23:59:59"
+    
+    # Botão para atualizar o relatório
+    if st.button("Atualizar Relatório", key="update_report"):
+        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
+    
+    # Inicializa a variável filtered_data
+    if 'filtered_data' not in st.session_state:
+        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
+    
+    # Exibe os dados em formato de tabela
+    if st.session_state.filtered_data.empty:
+        st.info("Não há dados de execução para o período selecionado.")
+    else:
+        # Formatação da tabela
+        display_df = st.session_state.filtered_data.copy()
+        display_df['execution_date'] = pd.to_datetime(display_df['execution_date'])
+        display_df['data_execucao'] = display_df['execution_date'].dt.strftime('%d/%m/%Y %H:%M')
+        
+        # Renomeia colunas para português
+        display_df.rename(columns={
+            'total_processed': 'Total Processado',
+            'successful': 'Sucessos',
+            'failed': 'Falhas',
+            'execution_time': 'Tempo (segundos)'
+        }, inplace=True)
+        
+        # Exibe a tabela
+        display_columns = ['data_execucao', 'Total Processado', 'Sucessos', 'Falhas', 'Tempo (segundos)']
+        st.dataframe(display_df[display_columns], width=800)
+        
+        # Estatísticas
+        total_novelties = display_df['Total Processado'].sum()
+        total_success = display_df['Sucessos'].sum()
+        total_failed = display_df['Falhas'].sum()
+        avg_time = display_df['Tempo (segundos)'].mean()
+        
         # Métricas
-        cols = st.columns(3)
-        with cols[0]:
-            st.markdown(
-                f'<div class="metric-container"><p>Novelties Processadas</p><h1>{st.session_state.processed_items}</h1></div>', 
-                unsafe_allow_html=True
-            )
-        with cols[1]:
-            st.markdown(
-                f'<div class="metric-container"><p>Sucesso</p><h1>{st.session_state.success_count}</h1></div>', 
-                unsafe_allow_html=True
-            )
-        with cols[2]:
-            st.markdown(
-                f'<div class="metric-container"><p>Falhas</p><h1>{st.session_state.failed_count}</h1></div>', 
-                unsafe_allow_html=True
-            )
-
-        # Barra de progresso
-        if st.session_state.total_items > 0:
-            st.progress(st.session_state.progress)
-            st.caption(f"Progresso: {st.session_state.processed_items}/{st.session_state.total_items} items")
-
-        # Linha divisória 
-        st.markdown("<hr style='margin: 20px 0; border-top: 1px solid #ddd;'>", unsafe_allow_html=True)
-
-        # Toggle para mostrar/ocultar o log completo
-        show_log = st.checkbox("Mostrar Log Completo", value=st.session_state.show_log)
-        st.session_state.show_log = show_log
-
-        # Exibe o log completo apenas se o checkbox estiver marcado
-        if st.session_state.show_log:
-            log_container = st.container()
-            log_container.text_area("Log Completo", value=st.session_state.log_output.getvalue(), height=400)
-
-def show_report_tab(tab):
-    with tab:
-        st.subheader(f"Relatório de Execuções - {CURRENT_COUNTRY}")
-        
-        # Filtros de data
-        col1, col2 = st.columns(2)
-        with col1:
-            default_start_date = datetime.datetime.now() - datetime.timedelta(days=30)
-            start_date = st.date_input("Data Inicial", value=default_start_date)
-        with col2:
-            end_date = st.date_input("Data Final", value=datetime.datetime.now())
-        
-        # Converte as datas para o formato string YYYY-MM-DD
-        start_date_str = start_date.strftime("%Y-%m-%d")
-        end_date_str = end_date.strftime("%Y-%m-%d") + " 23:59:59"
-        
-        # Botão para atualizar o relatório
-        if st.button("Atualizar Relatório", key="update_report"):
-            # Buscar apenas os relatórios do país atual
-            st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str, CURRENT_COUNTRY)
-        
-        # Inicializa a variável filtered_data
-        if 'filtered_data' not in st.session_state:
-            # Buscar apenas os relatórios do país atual
-            st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str, CURRENT_COUNTRY)
-        
-        # Exibe os dados em formato de tabela
-        if st.session_state.filtered_data.empty:
-            st.info(f"Não há dados de execução para {CURRENT_COUNTRY} no período selecionado.")
-        else:
-            # Formatação da tabela
-            display_df = st.session_state.filtered_data.copy()
-            display_df['execution_date'] = pd.to_datetime(display_df['execution_date'])
-            display_df['data_execucao'] = display_df['execution_date'].dt.strftime('%d/%m/%Y %H:%M')
-            
-            # Converter tempo de execução para minutos
-            display_df['tempo_minutos'] = (display_df['execution_time'] / 60).round(2)
-            
-            # Renomeia colunas para português
-            display_df.rename(columns={
-                'total_processed': 'Total Processado',
-                'successful': 'Sucessos',
-                'failed': 'Falhas',
-                'tempo_minutos': 'Tempo (minutos)'
-            }, inplace=True)
-            
-            # Exibe a tabela
-            display_columns = ['data_execucao', 'Total Processado', 'Sucessos', 'Falhas', 'Tempo (minutos)']
-            st.dataframe(display_df[display_columns], width=800)
-            
-            # Estatísticas
-            total_novelties = display_df['Total Processado'].sum()
-            total_success = display_df['Sucessos'].sum()
-            total_failed = display_df['Falhas'].sum()
-            avg_time = display_df['Tempo (minutos)'].mean()
-            
-            # Métricas
-            stats_cols = st.columns(4)
-            with stats_cols[0]:
-                st.metric("Total de Novelties", f"{total_novelties}")
-            with stats_cols[1]:
-                st.metric("Total de Sucessos", f"{total_success}")
-            with stats_cols[2]:
-                st.metric("Total de Falhas", f"{total_failed}")
-            with stats_cols[3]:
-                st.metric("Tempo Médio (min)", f"{avg_time:.2f}")
-
-tab1, tab2 = st.tabs(["Execução Manual", "Relatório"])
-
-show_execution_tab(tab1)
-show_report_tab(tab2)
+        stats_cols = st.columns(4)
+        with stats_cols[0]:
+            st.metric("Total de Novelties", f"{total_novelties}")
+        with stats_cols[1]:
+            st.metric("Total de Sucessos", f"{total_success}")
+        with stats_cols[2]:
+            st.metric("Total de Falhas", f"{total_failed}")
+        with stats_cols[3]:
+            st.metric("Tempo Médio (s)", f"{avg_time:.2f}")
