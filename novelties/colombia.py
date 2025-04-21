@@ -26,6 +26,9 @@ except ImportError:
         return os.environ.get("RAILWAY_ENVIRONMENT") == "true" or \
             os.environ.get("RAILWAY_PROJECT_ID") is not None or \
             os.environ.get("RAILWAY_SERVICE_ID") is not None
+    
+# Identifica o país atual
+CURRENT_COUNTRY = "Colombia"  # Definir constante para o país atual
 
 st.markdown("<h1 style='text-align: center;'>🇨🇴</h1>", unsafe_allow_html=True)
 # Adicione o CSS aqui
@@ -43,58 +46,68 @@ st.markdown("""
 """, unsafe_allow_html=True)
 # Verificar e instalar dependências
 def check_dependencies():
+    """Verificar e instalar dependências - oculto no Railway"""
     try:
-        # Verificar o sistema operacional
-        system = platform.system()
-        st.sidebar.info(f"Sistema Operacional: {system}")
-        
-        # Verificar se o Chrome está instalado
-        chrome_installed = False
-        
+        # Se estiver no Railway, não mostra nada na interface
         if is_railway():
-            # No Railway, assumimos que o Chrome está instalado corretamente pelo Dockerfile
-            chrome_installed = True
-            st.sidebar.success("✅ Google Chrome detectado (Railway)")
-        elif system == "Windows":
-            chrome_path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-            chrome_path_alt = "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
-            if os.path.exists(chrome_path) or os.path.exists(chrome_path_alt):
-                chrome_installed = True
-                st.sidebar.success("✅ Google Chrome detectado")
-            else:
-                st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
-        elif system == "Darwin":  # macOS
-            if os.path.exists("/Applications/Google Chrome.app"):
-                chrome_installed = True
-                st.sidebar.success("✅ Google Chrome detectado")
-            else:
-                st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
-        elif system == "Linux":
-            chrome_exists = os.system("which google-chrome > /dev/null 2>&1") == 0
-            if chrome_exists:
-                chrome_installed = True
-                st.sidebar.success("✅ Google Chrome detectado")
-            else:
-                st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
+            # Apenas verifica silenciosamente
+            required_modules = ["selenium", "webdriver_manager", "pandas"]
+            missing_modules = []
+            for module in required_modules:
+                try:
+                    __import__(module)
+                except ImportError:
+                    missing_modules.append(module)
+            
+            # Retorna True se tudo estiver ok
+            return len(missing_modules) == 0
         
-        # Verificar módulos Python
-        required_modules = ["selenium", "webdriver_manager", "pandas"]
-        missing_modules = []
-        for module in required_modules:
-            try:
-                __import__(module)
-            except ImportError:
-                missing_modules.append(module)
-        
-        if missing_modules:
-            st.sidebar.error(f"❌ Módulos faltando: {', '.join(missing_modules)}")
-            st.sidebar.info("Execute: pip install " + " ".join(missing_modules))
+        # Se for ambiente local, mostra as verificações normalmente
         else:
-            st.sidebar.success("✅ Todos os módulos Python necessários estão instalados")
-        
-        return chrome_installed and len(missing_modules) == 0
+            # Verificar o sistema operacional
+            system = platform.system()
+            st.sidebar.info(f"Sistema Operacional: {system}")
+            
+            # Verificar se o Chrome está instalado
+            if system == "Windows":
+                chrome_path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+                chrome_path_alt = "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+                if os.path.exists(chrome_path) or os.path.exists(chrome_path_alt):
+                    st.sidebar.success("✅ Google Chrome detectado")
+                else:
+                    st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
+            elif system == "Darwin":  # macOS
+                if os.path.exists("/Applications/Google Chrome.app"):
+                    st.sidebar.success("✅ Google Chrome detectado")
+                else:
+                    st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
+            elif system == "Linux":
+                chrome_exists = os.system("which google-chrome > /dev/null 2>&1") == 0
+                if chrome_exists:
+                    st.sidebar.success("✅ Google Chrome detectado")
+                else:
+                    st.sidebar.error("❌ Google Chrome não encontrado. Por favor, instale-o.")
+            
+            # Verificar módulos Python
+            required_modules = ["selenium", "webdriver_manager", "pandas"]
+            missing_modules = []
+            for module in required_modules:
+                try:
+                    __import__(module)
+                except ImportError:
+                    missing_modules.append(module)
+            
+            if missing_modules:
+                st.sidebar.error(f"❌ Módulos faltando: {', '.join(missing_modules)}")
+                st.sidebar.info("Execute: pip install " + " ".join(missing_modules))
+            else:
+                st.sidebar.success("✅ Todos os módulos Python necessários estão instalados")
+            
+            return len(missing_modules) == 0
     except Exception as e:
-        st.sidebar.error(f"Erro ao verificar dependências: {str(e)}")
+        # No Railway, não mostra erros na interface
+        if not is_railway():
+            st.sidebar.error(f"Erro ao verificar dependências: {str(e)}")
         return False
 
 # Inicializa o estado da sessão para armazenar logs
@@ -135,12 +148,16 @@ if 'found_pagination' not in st.session_state:
 if 'show_log' not in st.session_state:
     st.session_state.show_log = False
 
-# Sidebar com informações
-st.sidebar.title("Configuração")
-use_headless = st.sidebar.checkbox("Modo Headless", value=False, 
-                               help="Se marcado, o navegador não será exibido na tela. Desmarque para depuração.")
+# Sidebar com informações - apenas em ambiente local
+if not is_railway():
+    st.sidebar.title("Configuração")
+    use_headless = st.sidebar.checkbox("Modo Headless", value=False, 
+                                help="Se marcado, o navegador não será exibido na tela. Desmarque para depuração.")
+else:
+    # No Railway, headless é sempre True, mas não mostramos na interface
+    use_headless = True
 
-# Verificar dependências
+# Verificar dependências silenciosamente no Railway
 dependencies_ok = check_dependencies()
 
 # Tentar instalar o ChromeDriver
@@ -2718,17 +2735,25 @@ def handle_error(row, row_id):
     except Exception as e:
         logger.error(f"Erro ao tratar erro para novelty {row_id}: {str(e)}")
 
+# Função modificada para gerar o relatório
 def generate_report():
     """Gera um relatório da execução."""
+    
+    # Adiciona data e hora à execução
+    execution_time = time.time() - st.session_state.get('start_time', 0)
+    
     report = {
+        "execution_date": datetime.datetime.now(),
         "total_processados": st.session_state.success_count,
         "total_falhas": len(st.session_state.failed_items),
         "itens_com_falha": st.session_state.failed_items,
         "guias_fechadas": st.session_state.closed_tabs,
-        "encontrou_paginacao": st.session_state.found_pagination
+        "encontrou_paginacao": st.session_state.found_pagination,
+        "execution_time": execution_time  # Tempo em segundos
     }
     
     logger.info("======= RELATÓRIO DE EXECUÇÃO =======")
+    logger.info(f"País: {CURRENT_COUNTRY}")
     logger.info(f"Total de novelties processadas com sucesso: {report['total_processados']}")
     logger.info(f"Total de novelties com falha: {report['total_falhas']}")
     logger.info(f"Total de guias fechadas durante o processo: {report['guias_fechadas']}")
@@ -2740,6 +2765,14 @@ def generate_report():
             logger.info(f"  - ID: {item['id']}, Erro: {item['error']}")
             
     logger.info("=====================================")
+    
+    # Salva o relatório no banco de dados com o país
+    try:
+        from db_connection import save_execution_results
+        save_execution_results(report, CURRENT_COUNTRY)
+        logger.info("Relatório salvo no banco de dados com sucesso!")
+    except Exception as e:
+        logger.error(f"Erro ao salvar relatório no banco de dados: {str(e)}")
     
     st.session_state.report = report
 
@@ -2795,63 +2828,69 @@ if st.session_state.is_running:
         st.session_state.is_running = False
         st.success("Automação concluída com sucesso!")
 
-with tab2:
-    st.subheader("Relatório de Execuções")
-    
-    # Filtros de data
-    col1, col2 = st.columns(2)
-    with col1:
-        default_start_date = datetime.datetime.now() - datetime.timedelta(days=30)
-        start_date = st.date_input("Data Inicial", value=default_start_date)
-    with col2:
-        end_date = st.date_input("Data Final", value=datetime.datetime.now())
-    
-    # Converte as datas para o formato string YYYY-MM-DD
-    start_date_str = start_date.strftime("%Y-%m-%d")
-    end_date_str = end_date.strftime("%Y-%m-%d") + " 23:59:59"
-    
-    # Botão para atualizar o relatório
-    if st.button("Atualizar Relatório", key="update_report"):
-        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
-    
-    # Inicializa a variável filtered_data
-    if 'filtered_data' not in st.session_state:
-        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
-    
-    # Exibe os dados em formato de tabela
-    if st.session_state.filtered_data.empty:
-        st.info("Não há dados de execução para o período selecionado.")
-    else:
-        # Formatação da tabela
-        display_df = st.session_state.filtered_data.copy()
-        display_df['execution_date'] = pd.to_datetime(display_df['execution_date'])
-        display_df['data_execucao'] = display_df['execution_date'].dt.strftime('%d/%m/%Y %H:%M')
+def show_report_tab():
+    with tab2:
+        st.subheader(f"Relatório de Execuções - {CURRENT_COUNTRY}")
         
-        # Renomeia colunas para português
-        display_df.rename(columns={
-            'total_processed': 'Total Processado',
-            'successful': 'Sucessos',
-            'failed': 'Falhas',
-            'execution_time': 'Tempo (segundos)'
-        }, inplace=True)
+        # Filtros de data
+        col1, col2 = st.columns(2)
+        with col1:
+            default_start_date = datetime.datetime.now() - datetime.timedelta(days=30)
+            start_date = st.date_input("Data Inicial", value=default_start_date)
+        with col2:
+            end_date = st.date_input("Data Final", value=datetime.datetime.now())
         
-        # Exibe a tabela
-        display_columns = ['data_execucao', 'Total Processado', 'Sucessos', 'Falhas', 'Tempo (segundos)']
-        st.dataframe(display_df[display_columns], width=800)
+        # Converte as datas para o formato string YYYY-MM-DD
+        start_date_str = start_date.strftime("%Y-%m-%d")
+        end_date_str = end_date.strftime("%Y-%m-%d") + " 23:59:59"
         
-        # Estatísticas
-        total_novelties = display_df['Total Processado'].sum()
-        total_success = display_df['Sucessos'].sum()
-        total_failed = display_df['Falhas'].sum()
-        avg_time = display_df['Tempo (segundos)'].mean()
+        # Botão para atualizar o relatório
+        if st.button("Atualizar Relatório", key="update_report"):
+            # Buscar apenas os relatórios do país atual
+            st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str, CURRENT_COUNTRY)
         
-        # Métricas
-        stats_cols = st.columns(4)
-        with stats_cols[0]:
-            st.metric("Total de Novelties", f"{total_novelties}")
-        with stats_cols[1]:
-            st.metric("Total de Sucessos", f"{total_success}")
-        with stats_cols[2]:
-            st.metric("Total de Falhas", f"{total_failed}")
-        with stats_cols[3]:
-            st.metric("Tempo Médio (s)", f"{avg_time:.2f}")
+        # Inicializa a variável filtered_data
+        if 'filtered_data' not in st.session_state:
+            # Buscar apenas os relatórios do país atual
+            st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str, CURRENT_COUNTRY)
+        
+        # Exibe os dados em formato de tabela
+        if st.session_state.filtered_data.empty:
+            st.info(f"Não há dados de execução para {CURRENT_COUNTRY} no período selecionado.")
+        else:
+            # Formatação da tabela
+            display_df = st.session_state.filtered_data.copy()
+            display_df['execution_date'] = pd.to_datetime(display_df['execution_date'])
+            display_df['data_execucao'] = display_df['execution_date'].dt.strftime('%d/%m/%Y %H:%M')
+            
+            # Converter tempo de execução para minutos
+            display_df['tempo_minutos'] = (display_df['execution_time'] / 60).round(2)
+            
+            # Renomeia colunas para português
+            display_df.rename(columns={
+                'total_processed': 'Total Processado',
+                'successful': 'Sucessos',
+                'failed': 'Falhas',
+                'tempo_minutos': 'Tempo (minutos)'
+            }, inplace=True)
+            
+            # Exibe a tabela
+            display_columns = ['data_execucao', 'Total Processado', 'Sucessos', 'Falhas', 'Tempo (minutos)']
+            st.dataframe(display_df[display_columns], width=800)
+            
+            # Estatísticas
+            total_novelties = display_df['Total Processado'].sum()
+            total_success = display_df['Sucessos'].sum()
+            total_failed = display_df['Falhas'].sum()
+            avg_time = display_df['Tempo (minutos)'].mean()
+            
+            # Métricas
+            stats_cols = st.columns(4)
+            with stats_cols[0]:
+                st.metric("Total de Novelties", f"{total_novelties}")
+            with stats_cols[1]:
+                st.metric("Total de Sucessos", f"{total_success}")
+            with stats_cols[2]:
+                st.metric("Total de Falhas", f"{total_failed}")
+            with stats_cols[3]:
+                st.metric("Tempo Médio (min)", f"{avg_time:.2f}")

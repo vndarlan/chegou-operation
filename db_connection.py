@@ -6,7 +6,7 @@ import psycopg2
 from psycopg2 import sql
 import datetime
 
-# Verifica se estamos rodando no Railway (presença da variável RAILWAY_ENVIRONMENT)
+# Verifica se estamos rodando no Railway
 def is_railway():
     return os.environ.get('RAILWAY_ENVIRONMENT') is not None
 
@@ -65,18 +65,48 @@ def init_database():
         # Cria tabelas com sintaxe compatível com ambos os bancos
         if is_railway():
             # Tabelas para PostgreSQL
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS execution_history (
-                id SERIAL PRIMARY KEY,
-                execution_date TIMESTAMP,
-                total_processed INTEGER,
-                successful INTEGER,
-                failed INTEGER,
-                error_details TEXT,
-                execution_time REAL
-            )
-            ''')
             
+            # Verifica se a tabela já existe
+            cursor.execute("""
+                SELECT EXISTS (
+                   SELECT FROM information_schema.tables 
+                   WHERE table_name = 'execution_history'
+                )
+            """)
+            table_exists = cursor.fetchone()[0]
+            
+            # Se a tabela não existe, cria
+            if not table_exists:
+                cursor.execute('''
+                CREATE TABLE execution_history (
+                    id SERIAL PRIMARY KEY,
+                    execution_date TIMESTAMP,
+                    country VARCHAR(50) NOT NULL,
+                    total_processed INTEGER,
+                    successful INTEGER,
+                    failed INTEGER,
+                    error_details TEXT,
+                    execution_time REAL
+                )
+                ''')
+            else:
+                # Se a tabela já existe, verifica se precisa adicionar a coluna country
+                cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.columns
+                        WHERE table_name = 'execution_history' AND column_name = 'country'
+                    )
+                """)
+                column_exists = cursor.fetchone()[0]
+                
+                # Se a coluna não existe, adiciona
+                if not column_exists:
+                    cursor.execute('''
+                    ALTER TABLE execution_history
+                    ADD COLUMN country VARCHAR(50) DEFAULT 'unknown' NOT NULL
+                    ''')
+            
+            # Tabela de configuração
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS schedule_config (
                 id INTEGER PRIMARY KEY,
@@ -97,18 +127,37 @@ def init_database():
                 ''')
         else:
             # Tabelas para SQLite
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS execution_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                execution_date TEXT,
-                total_processed INTEGER,
-                successful INTEGER,
-                failed INTEGER,
-                error_details TEXT,
-                execution_time REAL
-            )
-            ''')
             
+            # Verificar se a tabela execution_history existe
+            cursor.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name='execution_history';
+            """)
+            table_exists = cursor.fetchone() is not None
+            
+            if not table_exists:
+                # Criar tabela com campo country
+                cursor.execute('''
+                CREATE TABLE execution_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    execution_date TEXT,
+                    country TEXT NOT NULL,
+                    total_processed INTEGER,
+                    successful INTEGER,
+                    failed INTEGER,
+                    error_details TEXT,
+                    execution_time REAL
+                )
+                ''')
+            else:
+                # Verificar se a coluna country existe
+                try:
+                    cursor.execute('SELECT country FROM execution_history LIMIT 1')
+                except sqlite3.OperationalError:
+                    # A coluna não existe, adiciona
+                    cursor.execute('ALTER TABLE execution_history ADD COLUMN country TEXT DEFAULT "unknown" NOT NULL')
+            
+            # Tabela de configuração
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS schedule_config (
                 id INTEGER PRIMARY KEY,
@@ -135,8 +184,8 @@ def init_database():
         conn.close()
 
 # Salva resultados da execução no banco de dados
-def save_execution_results(results):
-    """Salva os resultados de uma execução no banco de dados"""
+def save_execution_results(results, country):
+    """Salva os resultados de uma execução no banco de dados com o país"""
     try:
         # Usar SQLAlchemy para inserção de dados
         engine = get_db_engine()
@@ -144,6 +193,7 @@ def save_execution_results(results):
         # Preparar dados para a inserção
         data = {
             "execution_date": results.get('execution_date', datetime.datetime.now()),
+            "country": country,  # Novo campo para país
             "total_processed": results.get('total_processados', 0),
             "successful": results.get('total_processados', 0) - results.get('total_falhas', 0),
             "failed": results.get('total_falhas', 0),
@@ -154,8 +204,8 @@ def save_execution_results(results):
         # Criar consulta SQL
         query = """
             INSERT INTO execution_history 
-            (execution_date, total_processed, successful, failed, error_details, execution_time)
-            VALUES (:execution_date, :total_processed, :successful, :failed, :error_details, :execution_time)
+            (execution_date, country, total_processed, successful, failed, error_details, execution_time)
+            VALUES (:execution_date, :country, :total_processed, :successful, :failed, :error_details, :execution_time)
         """
         
         # Executar a inserção
@@ -239,28 +289,36 @@ def save_schedule_config(config):
         print(f"Erro ao salvar configuração de agendamento: {str(e)}")
         return False
 
-# Busca histórico de execuções
-def get_execution_history(start_date, end_date):
-    """Busca o histórico de execuções dentro de um período usando SQLAlchemy"""
+# Busca histórico de execuções, agora com filtro por país
+def get_execution_history(start_date, end_date, country=None):
+    """Busca o histórico de execuções dentro de um período, opcionalmente filtrado por país"""
     try:
         engine = get_db_engine()
         
-        # Criar consulta SQL com parâmetros nomeados
-        query = """
-            SELECT execution_date, total_processed, successful, failed, execution_time
+        # Base da consulta SQL
+        base_query = """
+            SELECT execution_date, country, total_processed, successful, failed, execution_time
             FROM execution_history
             WHERE execution_date BETWEEN :start_date AND :end_date
-            ORDER BY execution_date DESC
         """
+        
+        # Adiciona filtro por país se especificado
+        if country:
+            base_query += " AND country = :country"
+        
+        # Adiciona ordenação
+        base_query += " ORDER BY execution_date DESC"
         
         # Parâmetros da consulta
         params = {"start_date": start_date, "end_date": end_date}
+        if country:
+            params["country"] = country
         
         # Executar a consulta e carregar os resultados em um DataFrame
-        df = pd.read_sql_query(sql=text(query), con=engine, params=params)
+        df = pd.read_sql_query(sql=text(base_query), con=engine, params=params)
         
         return df
     except Exception as e:
         print(f"Erro ao buscar histórico de execuções: {str(e)}")
         # Retorna DataFrame vazio em caso de erro
-        return pd.DataFrame(columns=['execution_date', 'total_processed', 'successful', 'failed', 'execution_time'])
+        return pd.DataFrame(columns=['execution_date', 'country', 'total_processed', 'successful', 'failed', 'execution_time'])
