@@ -26,6 +26,8 @@ try:
 except ImportError:
     def is_railway():
         return "RAILWAY_ENVIRONMENT" in os.environ
+    
+THIS_COUNTRY = "mexico" # Mude para "chile", "colombia", 
 
 # Importa as funções de conexão com banco de dados com tratamento de erro
 try:
@@ -403,8 +405,8 @@ with tab2:
     # Botão para atualizar o relatório
     if st.button("Atualizar Relatório Histórico", key="update_report_history"):
         try:
-            # Busca os dados do banco ao clicar no botão
-            st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
+            # Busca os dados do banco FILTRANDO POR PAÍS
+            st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str, THIS_COUNTRY)
             st.rerun() # Recarrega para mostrar os dados atualizados
         except Exception as e:
             st.error(f"Erro ao buscar histórico do banco de dados: {e}")
@@ -412,11 +414,13 @@ with tab2:
 
     # Inicializa a variável filtered_data se não existir
     if 'filtered_data' not in st.session_state:
-         try:
-            # Tenta carregar na primeira vez também
-            st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
-         except Exception as e:
-            st.error(f"Erro ao buscar histórico do banco de dados: {e}")
+        try:
+            # Tenta carregar na primeira vez FILTRANDO POR PAÍS
+            st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str, THIS_COUNTRY)
+        except Exception as e:
+            # Log específico para falha na carga inicial
+            logger.error(f"Erro ao buscar histórico inicial para {THIS_COUNTRY}: {e}", exc_info=True)
+            st.error(f"Erro ao buscar histórico inicial do banco de dados: {e}")
             st.session_state.filtered_data = pd.DataFrame()
 
     # Exibe os dados em formato de tabela
@@ -1726,11 +1730,13 @@ def generate_report():
     
     # Salva o relatório no banco de dados
     try:
-        save_execution_results(report)
+        logger.info(f"Tentando salvar relatório para {THIS_COUNTRY}...")
+        # Passa THIS_COUNTRY como segundo argumento
+        save_execution_results(report, THIS_COUNTRY)
         logger.info("Relatório salvo no banco de dados com sucesso")
     except Exception as e:
-        logger.error(f"Erro ao salvar relatório no banco de dados: {str(e)}")
-    
+        logger.error(f"Erro ao salvar relatório no banco de dados para {THIS_COUNTRY}: {e}", exc_info=True)
+
     st.session_state.report = report
 
 with tab2:

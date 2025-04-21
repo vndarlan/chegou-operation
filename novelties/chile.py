@@ -25,6 +25,8 @@ try:
 except ImportError:
     def is_railway():
         return "RAILWAY_ENVIRONMENT" in os.environ
+    
+THIS_COUNTRY = "chile" # Mude para "chile", "colombia", 
 
 # Função para criar pasta de screenshots se não existir
 def create_screenshots_folder():

@@ -24,6 +24,8 @@ try:
 except ImportError:
     def is_railway():
         return "RAILWAY_ENVIRONMENT" in os.environ
+    
+THIS_COUNTRY = "colombia" # Mude para "chile", "colombia", 
 
 st.markdown("<h1 style='text-align: center;'>🇨🇴</h1>", unsafe_allow_html=True)
 # Adicione o CSS aqui
