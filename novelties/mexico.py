@@ -1733,6 +1733,67 @@ def generate_report():
     
     st.session_state.report = report
 
+with tab2:
+    st.subheader("Relatório de Execuções")
+    
+    # Filtros de data
+    col1, col2 = st.columns(2)
+    with col1:
+        default_start_date = datetime.datetime.now() - datetime.timedelta(days=30)
+        start_date = st.date_input("Data Inicial", value=default_start_date)
+    with col2:
+        end_date = st.date_input("Data Final", value=datetime.datetime.now())
+    
+    # Converte as datas para o formato string YYYY-MM-DD
+    start_date_str = start_date.strftime("%Y-%m-%d")
+    end_date_str = end_date.strftime("%Y-%m-%d") + " 23:59:59"
+    
+    # Botão para atualizar o relatório
+    if st.button("Atualizar Relatório", key="update_report"):
+        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
+    
+    # Inicializa a variável filtered_data
+    if 'filtered_data' not in st.session_state:
+        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
+    
+    # Exibe os dados em formato de tabela
+    if st.session_state.filtered_data.empty:
+        st.info("Não há dados de execução para o período selecionado.")
+    else:
+        # Formatação da tabela
+        display_df = st.session_state.filtered_data.copy()
+        display_df['execution_date'] = pd.to_datetime(display_df['execution_date'])
+        display_df['data_execucao'] = display_df['execution_date'].dt.strftime('%d/%m/%Y %H:%M')
+        
+        # Renomeia colunas para português
+        display_df.rename(columns={
+            'total_processed': 'Total Processado',
+            'successful': 'Sucessos',
+            'failed': 'Falhas',
+            'execution_time': 'Tempo (segundos)'
+        }, inplace=True)
+        
+        # Exibe a tabela
+        display_columns = ['data_execucao', 'Total Processado', 'Sucessos', 'Falhas', 'Tempo (segundos)']
+        st.dataframe(display_df[display_columns], width=800)
+        
+        # Estatísticas
+        total_novelties = display_df['Total Processado'].sum()
+        total_success = display_df['Sucessos'].sum()
+        total_failed = display_df['Falhas'].sum()
+        avg_time = display_df['Tempo (segundos)'].mean()
+        
+        # Métricas
+        stats_cols = st.columns(4)
+        with stats_cols[0]:
+            st.metric("Total de Novelties", f"{total_novelties}")
+        with stats_cols[1]:
+            st.metric("Total de Sucessos", f"{total_success}")
+        with stats_cols[2]:
+            st.metric("Total de Falhas", f"{total_failed}")
+        with stats_cols[3]:
+            st.metric("Tempo Médio (s)", f"{avg_time:.2f}")
+
 # Processamento da automação baseado no estado atual
 if st.session_state.is_running:
     current_step = st.session_state.get('automation_step', 'idle') # Pega o passo atual
@@ -1871,64 +1932,3 @@ if st.session_state.is_running:
         # Tenta gerar um relatório parcial
         generate_report()
         st.rerun() # Para a execução e atualiza a UI
-
-with tab2:
-    st.subheader("Relatório de Execuções")
-    
-    # Filtros de data
-    col1, col2 = st.columns(2)
-    with col1:
-        default_start_date = datetime.datetime.now() - datetime.timedelta(days=30)
-        start_date = st.date_input("Data Inicial", value=default_start_date)
-    with col2:
-        end_date = st.date_input("Data Final", value=datetime.datetime.now())
-    
-    # Converte as datas para o formato string YYYY-MM-DD
-    start_date_str = start_date.strftime("%Y-%m-%d")
-    end_date_str = end_date.strftime("%Y-%m-%d") + " 23:59:59"
-    
-    # Botão para atualizar o relatório
-    if st.button("Atualizar Relatório", key="update_report"):
-        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
-    
-    # Inicializa a variável filtered_data
-    if 'filtered_data' not in st.session_state:
-        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
-    
-    # Exibe os dados em formato de tabela
-    if st.session_state.filtered_data.empty:
-        st.info("Não há dados de execução para o período selecionado.")
-    else:
-        # Formatação da tabela
-        display_df = st.session_state.filtered_data.copy()
-        display_df['execution_date'] = pd.to_datetime(display_df['execution_date'])
-        display_df['data_execucao'] = display_df['execution_date'].dt.strftime('%d/%m/%Y %H:%M')
-        
-        # Renomeia colunas para português
-        display_df.rename(columns={
-            'total_processed': 'Total Processado',
-            'successful': 'Sucessos',
-            'failed': 'Falhas',
-            'execution_time': 'Tempo (segundos)'
-        }, inplace=True)
-        
-        # Exibe a tabela
-        display_columns = ['data_execucao', 'Total Processado', 'Sucessos', 'Falhas', 'Tempo (segundos)']
-        st.dataframe(display_df[display_columns], width=800)
-        
-        # Estatísticas
-        total_novelties = display_df['Total Processado'].sum()
-        total_success = display_df['Sucessos'].sum()
-        total_failed = display_df['Falhas'].sum()
-        avg_time = display_df['Tempo (segundos)'].mean()
-        
-        # Métricas
-        stats_cols = st.columns(4)
-        with stats_cols[0]:
-            st.metric("Total de Novelties", f"{total_novelties}")
-        with stats_cols[1]:
-            st.metric("Total de Sucessos", f"{total_success}")
-        with stats_cols[2]:
-            st.metric("Total de Falhas", f"{total_failed}")
-        with stats_cols[3]:
-            st.metric("Tempo Médio (s)", f"{avg_time:.2f}")
