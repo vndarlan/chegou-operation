@@ -94,7 +94,6 @@ def main():
                     st.Page("novelties/mexico.py",   title="México",   icon=":material/flag:"),
                     st.Page("novelties/chile.py",    title="Chile",    icon=":material/flag:"),
                     st.Page("novelties/colombia.py", title="Colômbia", icon=":material/flag:"),
-                    st.Page("novelties/equador.py",  title="Equador",  icon=":material/flag:"),
                 ],
                 "Moderação": [
                     st.Page("moderacao/busca_id.py", title="Busca pelo ID", icon=":material/manage_search:"),
@@ -114,7 +113,6 @@ def main():
                     st.Page("novelties/mexico.py",   title="México",   icon=":material/flag:"),
                     st.Page("novelties/chile.py",    title="Chile",    icon=":material/flag:"),
                     st.Page("novelties/colombia.py", title="Colômbia", icon=":material/flag:"),
-                    st.Page("novelties/equador.py",  title="Equador",  icon=":material/flag:"),
                 ],
                 "Moderação": [
                     st.Page("moderacao/busca_id.py", title="Busca pelo ID", icon=":material/manage_search:"),

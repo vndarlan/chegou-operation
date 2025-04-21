@@ -2894,3 +2894,5 @@ def show_report_tab():
                 st.metric("Total de Falhas", f"{total_failed}")
             with stats_cols[3]:
                 st.metric("Tempo Médio (min)", f"{avg_time:.2f}")
+
+show_report_tab()
