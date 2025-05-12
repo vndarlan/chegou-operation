@@ -39,7 +39,7 @@ if "urls_para_comprar_lote" not in st.session_state:
     st.session_state.urls_para_comprar_lote = []
 
 # --- Configurações da API ---
-API_KEY = "k*4)r(4*C*5@t)3Ty(w*5r)Y)Z("  # Chave de API fornecida
+API_KEY = "bL*CK)GI@5(cS@KY*l@t*n@U("  # Chave de API fornecida
 API_URL = "https://www.smmraja.com/api/v3"
 
 # ---------------------------------------------------------------------------- #
