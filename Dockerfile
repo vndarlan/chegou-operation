@@ -3,6 +3,8 @@ FROM python:3.10-slim
 # Define variável de ambiente para indicar que estamos no Railway
 ENV RAILWAY_ENVIRONMENT=true
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV SELENIUM_TIMEOUT=60
 
 # Instala dependências do sistema
 RUN apt-get update && apt-get install -y \
@@ -56,10 +58,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copia o restante dos arquivos
 COPY . .
 
-# Cria arquivos necessários e define permissões
-RUN mkdir -p /app/logs \
+# Cria diretórios necessários e define permissões
+RUN mkdir -p /app/logs /app/screenshots \
     && touch /app/dropi_automation.db \
-    && chmod -R 777 /app/logs \
+    && chmod -R 777 /app/logs /app/screenshots \
     && chmod 666 /app/dropi_automation.db
 
 # Expõe a porta que será usada

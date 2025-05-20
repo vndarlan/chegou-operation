@@ -540,13 +540,19 @@ def login():
         # Abre o site em uma nova janela maximizada
         driver.maximize_window()
         
+        # Configurações especiais para o Railway
+        if is_railway():
+            driver.set_window_size(1920, 1080)
+            driver.set_page_load_timeout(60)
+            driver.set_script_timeout(60)
+        
         # Navega para a página de login
         logger.info("Navegando para a página de login...")
         driver.get("https://app.dropi.mx/")
-        time.sleep(5)  # Espera fixa de 5 segundos
+        time.sleep(8)  # Espera fixa aumentada para o Railway
         
         # Tira screenshot para análise
-        driver.save_screenshot("login_page.png")
+        save_screenshot(driver, "login_page.png")
         logger.info("Screenshot da página salvo como login_page.png")
         
         # Inspeciona a página e loga a estrutura HTML para análise
@@ -570,56 +576,90 @@ def login():
                 input_name = inp.get_attribute('name')
                 logger.info(f"Input #{i}: tipo={input_type}, id={input_id}, name={input_name}")
             
-            # Tenta localizar o campo de email/usuário - tentando diferentes atributos
+            # Tenta localizar o campo de email/usuário com espera explícita
             email_field = None
             
-            # Tenta por tipo "email"
             try:
-                email_field = driver.find_element(By.XPATH, "//input[@type='email']")
-                logger.info("Campo de email encontrado por type='email'")
-            except:
-                pass
+                # Espera explícita para o campo de email
+                email_field = WebDriverWait(driver, 15).until(
+                    EC.element_to_be_clickable((By.XPATH, "//input[@type='email']"))
+                )
+                logger.info("Campo de email encontrado por type='email' com espera explícita")
+            except TimeoutException:
+                logger.info("Timeout esperando pelo campo de email type='email'")
                 
-            # Tenta por tipo "text"
-            if not email_field:
                 try:
-                    email_field = driver.find_element(By.XPATH, "//input[@type='text']")
-                    logger.info("Campo de email encontrado por type='text'")
+                    # Tenta com type='text'
+                    email_field = WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.XPATH, "//input[@type='text']"))
+                    )
+                    logger.info("Campo de email encontrado por type='text' com espera explícita")
                 except:
-                    pass
-            
-            # Tenta pelo primeiro input
-            if not email_field and len(inputs) > 0:
-                email_field = inputs[0]
-                logger.info("Usando primeiro campo input encontrado para email")
+                    # Se ainda falhar, tenta pegar o primeiro input
+                    if len(inputs) > 0:
+                        WebDriverWait(driver, 10).until(
+                            EC.element_to_be_clickable((By.TAG_NAME, 'input'))
+                        )
+                        email_field = inputs[0]
+                        logger.info("Usando primeiro campo input encontrado para email")
             
             # Se encontrou o campo de email, preenche
             if email_field:
-                email_field.clear()
-                email_field.send_keys(st.session_state.email)
+                # Rola para o elemento para garantir visibilidade
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", email_field)
+                time.sleep(1)
+                
+                # Preenche usando JavaScript primeiro (mais confiável no Railway)
+                driver.execute_script("arguments[0].value = arguments[1];", email_field, st.session_state.email)
+                driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", email_field)
+                driver.execute_script("arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", email_field)
+                
+                # Tenta também com método padrão
+                try:
+                    email_field.clear()
+                    email_field.send_keys(st.session_state.email)
+                except:
+                    logger.info("Preenchimento direto falhou, mas JS deve ter funcionado")
+                
                 logger.info(f"Email preenchido: {st.session_state.email}")
             else:
                 raise Exception("Não foi possível encontrar o campo de email")
             
-            # Procura o campo de senha
+            # Procura o campo de senha com espera explícita
             password_field = None
             
-            # Tenta por tipo "password"
             try:
-                password_field = driver.find_element(By.XPATH, "//input[@type='password']")
-                logger.info("Campo de senha encontrado por type='password'")
+                password_field = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//input[@type='password']"))
+                )
+                logger.info("Campo de senha encontrado por type='password' com espera explícita")
             except:
-                pass
-            
-            # Tenta usando o segundo input
-            if not password_field and len(inputs) > 1:
-                password_field = inputs[1]
-                logger.info("Usando segundo campo input encontrado para senha")
+                # Tenta usando o segundo input
+                if len(inputs) > 1:
+                    WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.TAG_NAME, 'input'))
+                    )
+                    password_field = inputs[1]
+                    logger.info("Usando segundo campo input encontrado para senha")
             
             # Se encontrou o campo de senha, preenche
             if password_field:
-                password_field.clear()
-                password_field.send_keys(st.session_state.password)
+                # Rola para o elemento
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", password_field)
+                time.sleep(1)
+                
+                # Preenche usando JavaScript primeiro
+                driver.execute_script("arguments[0].value = arguments[1];", password_field, st.session_state.password)
+                driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", password_field)
+                driver.execute_script("arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", password_field)
+                
+                # Tenta também com método padrão
+                try:
+                    password_field.clear()
+                    password_field.send_keys(st.session_state.password)
+                except:
+                    logger.info("Preenchimento direto da senha falhou, mas JS deve ter funcionado")
+                
                 logger.info("Senha preenchida")
             else:
                 raise Exception("Não foi possível encontrar o campo de senha")
@@ -632,18 +672,16 @@ def login():
                 btn_type = btn.get_attribute('type')
                 logger.info(f"Botão #{i}: texto='{btn_text}', tipo={btn_type}")
             
-            # Procura o botão de login
+            # Procura o botão de login com espera explícita
             login_button = None
             
-            # Tenta por tipo "submit"
             try:
-                login_button = driver.find_element(By.XPATH, "//button[@type='submit']")
-                logger.info("Botão de login encontrado por type='submit'")
+                login_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[@type='submit']"))
+                )
+                logger.info("Botão de login encontrado por type='submit' com espera explícita")
             except:
-                pass
-            
-            # Tenta por texto
-            if not login_button:
+                # Tenta por texto
                 for btn in buttons:
                     if "iniciar" in btn.text.lower() or "login" in btn.text.lower() or "entrar" in btn.text.lower():
                         login_button = btn
@@ -652,21 +690,37 @@ def login():
             
             # Se não encontrou por texto específico, usa o primeiro botão
             if not login_button and len(buttons) > 0:
+                # Espera o botão ser clicável
+                WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.TAG_NAME, 'button'))
+                )
                 login_button = buttons[0]
                 logger.info("Usando primeiro botão encontrado para login")
             
             # Se encontrou o botão, clica
             if login_button:
-                login_button.click()
-                logger.info("Clicado no botão de login")
+                # Rola para o botão
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", login_button)
+                time.sleep(1)
+                
+                # Clica usando JavaScript (mais confiável no Railway)
+                driver.execute_script("arguments[0].click();", login_button)
+                logger.info("Clicado no botão de login via JavaScript")
+                
+                # Tenta também com método padrão
+                try:
+                    login_button.click()
+                    logger.info("Clicado no botão de login via método padrão (backup)")
+                except:
+                    logger.info("Clique direto falhou, mas JS deve ter funcionado")
             else:
                 raise Exception("Não foi possível encontrar o botão de login")
             
             # Aguarda a navegação
-            time.sleep(8)
+            time.sleep(10)  # Aumentado para o Railway
             
             # Tira screenshot após o login
-            driver.save_screenshot("after_login.png")
+            save_screenshot(driver, "after_login.png")
             logger.info("Screenshot após login salvo como after_login.png")
             
             # Verifica se o login foi bem-sucedido
@@ -698,8 +752,8 @@ def login():
         logger.info("Tentando método alternativo: navegação direta...")
         try:
             driver.get("https://app.dropi.mx/orders")
-            time.sleep(5)
-            driver.save_screenshot("direct_orders.png")
+            time.sleep(8)  # Aumentado para o Railway
+            save_screenshot(driver, "direct_orders.png")
             
             # Verifica se fomos redirecionados para login ou se estamos na página de orders
             current_url = driver.current_url
@@ -779,7 +833,7 @@ def navigate_to_novelties():
         
         # Tira screenshot para verificar
         try:
-            driver.save_screenshot("novelties_page.png")
+            save_screenshot(driver, "novelties_page.png")
             logger.info("Screenshot da página de novelties salvo")
         except:
             pass
@@ -811,7 +865,7 @@ def configure_entries_display():
         
         # Tira screenshot
         try:
-            driver.save_screenshot("page_bottom_before.png")
+            save_screenshot(driver, "page_bottom_before.png")
             logger.info("Screenshot do final da página salvo (antes)")
         except:
             pass
@@ -839,7 +893,7 @@ def configure_entries_display():
                 select_element = select_elements[0]
                 
                 # Tira screenshot antes de interagir com o select
-                driver.save_screenshot("before_select_interaction.png")
+                save_screenshot(driver, "before_select_interaction.png")
                 
                 # Cria um objeto Select para manipular o elemento
                 select = Select(select_element)
@@ -899,7 +953,7 @@ def configure_entries_display():
                         logger.info(f"Erro ao selecionar via JavaScript: {str(e)}")
                 
                 # Tira screenshot após tentar selecionar
-                driver.save_screenshot("after_select_interaction.png")
+                save_screenshot(driver, "after_select_interaction.png")
                 
                 if entries_found:
                     logger.info("Configurado para exibir 1000 entradas")
@@ -963,7 +1017,7 @@ def configure_entries_display():
                     rows = rows[1:]  # Remove a primeira linha, que provavelmente é o cabeçalho
             
             # Tira screenshot da tabela para análise
-            driver.save_screenshot("table_after_loading.png")
+            save_screenshot(driver, "table_after_loading.png")
             logger.info("Screenshot da tabela após carregamento salvo")
             
             st.session_state.rows = rows
@@ -1373,7 +1427,7 @@ def extract_address_from_page(driver):
         
         # Tira screenshot para análise
         try:
-            driver.save_screenshot("page_for_address.png")
+            save_screenshot(driver, "page_for_address.png")
             logger.info("Screenshot para busca de endereço salvo")
         except:
             pass
@@ -1914,8 +1968,13 @@ def save_screenshot(driver, filename, subdir="screenshots"):
             os.makedirs(subdir)
             logger.info(f"Pasta '{subdir}' criada para screenshots")
         
+        # Adiciona timestamp para evitar sobrescrever arquivos
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename_with_timestamp = f"{timestamp}_{filename}"
+        
         # Caminho completo para o arquivo
-        filepath = os.path.join(subdir, filename)
+        filepath = os.path.join(subdir, filename_with_timestamp)
         
         # Salva o screenshot
         driver.save_screenshot(filepath)
@@ -1924,7 +1983,7 @@ def save_screenshot(driver, filename, subdir="screenshots"):
     except Exception as e:
         logger.error(f"Erro ao salvar screenshot '{filename}': {str(e)}")
         return False
-
+    
 def generate_report():
     """Gera um relatório da execução e salva no banco de dados."""
     # Calcula o tempo de execução
@@ -1969,67 +2028,6 @@ def generate_report():
         logger.error(f"Erro ao salvar relatório no banco de dados para {THIS_COUNTRY}: {e}", exc_info=True)
 
     st.session_state.report = report
-
-with tab2:
-    st.subheader("Relatório de Execuções")
-    
-    # Filtros de data
-    col1, col2 = st.columns(2)
-    with col1:
-        default_start_date = datetime.datetime.now() - datetime.timedelta(days=30)
-        start_date = st.date_input("Data Inicial", value=default_start_date)
-    with col2:
-        end_date = st.date_input("Data Final", value=datetime.datetime.now())
-    
-    # Converte as datas para o formato string YYYY-MM-DD
-    start_date_str = start_date.strftime("%Y-%m-%d")
-    end_date_str = end_date.strftime("%Y-%m-%d") + " 23:59:59"
-    
-    # Botão para atualizar o relatório
-    if st.button("Atualizar Relatório", key="update_report"):
-        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
-    
-    # Inicializa a variável filtered_data
-    if 'filtered_data' not in st.session_state:
-        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
-    
-    # Exibe os dados em formato de tabela
-    if st.session_state.filtered_data.empty:
-        st.info("Não há dados de execução para o período selecionado.")
-    else:
-        # Formatação da tabela
-        display_df = st.session_state.filtered_data.copy()
-        display_df['execution_date'] = pd.to_datetime(display_df['execution_date'])
-        display_df['data_execucao'] = display_df['execution_date'].dt.strftime('%d/%m/%Y %H:%M')
-        
-        # Renomeia colunas para português
-        display_df.rename(columns={
-            'total_processed': 'Total Processado',
-            'successful': 'Sucessos',
-            'failed': 'Falhas',
-            'execution_time': 'Tempo (segundos)'
-        }, inplace=True)
-        
-        # Exibe a tabela
-        display_columns = ['data_execucao', 'Total Processado', 'Sucessos', 'Falhas', 'Tempo (segundos)']
-        st.dataframe(display_df[display_columns], width=800)
-        
-        # Estatísticas
-        total_novelties = display_df['Total Processado'].sum()
-        total_success = display_df['Sucessos'].sum()
-        total_failed = display_df['Falhas'].sum()
-        avg_time = display_df['Tempo (segundos)'].mean()
-        
-        # Métricas
-        stats_cols = st.columns(4)
-        with stats_cols[0]:
-            st.metric("Total de Novelties", f"{total_novelties}")
-        with stats_cols[1]:
-            st.metric("Total de Sucessos", f"{total_success}")
-        with stats_cols[2]:
-            st.metric("Total de Falhas", f"{total_failed}")
-        with stats_cols[3]:
-            st.metric("Tempo Médio (s)", f"{avg_time:.2f}")
 
 # Processamento da automação baseado no estado atual
 if st.session_state.is_running:
