@@ -1187,17 +1187,77 @@ def process_current_novelty():
         address = extract_address_from_page(driver) # Tenta extrair endereço
         form_modal = None
         form_found = False
+
+        # Salvar screenshot para diagnóstico
         try:
-            # Tenta encontrar o formulário dentro de uma modal visível OU diretamente no body
-            xpath_form = "//ngb-modal-window[contains(@class, 'show')]//form | //body//form[.//label[contains(text(), 'Solución')]]"
-            form_modal = WebDriverWait(driver, 7).until( EC.visibility_of_element_located((By.XPATH, xpath_form)) )
-            logger.info("Formulário encontrado dentro de modal ou body.")
-            form_found = True
-        except TimeoutException:
-             logger.warning("Formulário não encontrado em modal/body visível em 7s.")
+            save_screenshot(driver, "form_search_debug.png")
+            logger.info("Screenshot salvo para diagnóstico do formulário")
+        except Exception as ss_e:
+            logger.warning(f"Não foi possível salvar screenshot: {ss_e}")
+
+        # Várias estratégias para encontrar o formulário
+        try:
+            # Estratégia 1: Versão original ampliada
+            logger.info("Tentando encontrar formulário (estratégia 1)...")
+            xpath_form_1 = "//ngb-modal-window[contains(@class, 'show')]//form | //body//form[.//label[contains(text(), 'Solución') or contains(text(), 'solucion') or contains(text(), 'Solucion')]]"
+            try:
+                form_modal = WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.XPATH, xpath_form_1)))
+                logger.info("Formulário encontrado com estratégia 1.")
+                form_found = True
+            except:
+                logger.info("Formulário não encontrado com estratégia 1.")
+                
+            # Estratégia 2: Qualquer formulário em modal
+            if not form_found:
+                logger.info("Tentando encontrar formulário (estratégia 2)...")
+                xpath_form_2 = "//ngb-modal-window[contains(@class, 'show')]//form"
+                try:
+                    form_modal = WebDriverWait(driver, 5).until(EC.visibility_of_element_located((By.XPATH, xpath_form_2)))
+                    logger.info("Formulário encontrado com estratégia 2.")
+                    form_found = True
+                except:
+                    logger.info("Formulário não encontrado com estratégia 2.")
+            
+            # Estratégia 3: Qualquer modal aberto, mesmo sem form
+            if not form_found:
+                logger.info("Tentando encontrar formulário (estratégia 3)...")
+                xpath_form_3 = "//ngb-modal-window[contains(@class, 'show')]"
+                try:
+                    form_modal = WebDriverWait(driver, 5).until(EC.visibility_of_element_located((By.XPATH, xpath_form_3)))
+                    logger.info("Modal encontrado com estratégia 3 (sem form específico).")
+                    form_found = True
+                except:
+                    logger.info("Modal não encontrado com estratégia 3.")
+            
+            # Estratégia 4: Procura por campos de entrada diretamente
+            if not form_found:
+                logger.info("Tentando encontrar formulário (estratégia 4)...")
+                try:
+                    input_elements = driver.find_elements(By.XPATH, "//input[@type='text'] | //textarea")
+                    if input_elements:
+                        # Cria um "formulário virtual" usando o próprio driver
+                        form_modal = driver
+                        logger.info("Usando driver como formulário virtual na estratégia 4")
+                        form_found = True
+                except Exception as e4:
+                    logger.info(f"Estratégia 4 falhou: {e4}")
+                    
         except Exception as e_form:
              logger.error(f"Erro ao procurar formulário: {e_form}")
 
+        # Diagnosticar estrutura da página
+        try:
+            logger.info("Analisando estrutura da página para diagnóstico...")
+            modals = driver.find_elements(By.XPATH, "//ngb-modal-window[contains(@class, 'show')]")
+            logger.info(f"Modais ativos encontrados: {len(modals)}")
+            
+            forms = driver.find_elements(By.TAG_NAME, "form")
+            logger.info(f"Total de formulários na página: {len(forms)}")
+            
+            inputs = driver.find_elements(By.XPATH, "//input | //textarea")
+            logger.info(f"Campos de entrada na página: {len(inputs)}")
+        except Exception as e_debug:
+            logger.warning(f"Erro ao analisar estrutura: {e_debug}")
 
         if form_found and form_modal:
             solution_filled = fill_solution_field(driver, form_modal, address)
@@ -1273,11 +1333,8 @@ def process_current_novelty():
 
         # Tenta tirar um screenshot da tela no momento do erro
         screenshot_filename = f"error_{row_id.replace(' ', '_').replace('/', '-')}_{datetime.datetime.now().strftime('%H%M%S')}.png"
-        try:
-            driver.save_screenshot(screenshot_filename)
-            logger.info(f"Screenshot do erro salvo como: {screenshot_filename}")
-        except Exception as ss_error:
-            logger.error(f"Falha ao tirar screenshot do erro: {ss_error}")
+        save_screenshot(driver, screenshot_filename)
+        logger.info(f"Screenshot do erro salvo na pasta screenshots")
 
         # Chama a função de tratamento de erro (fluxo alternativo, fechar modais)
         handle_error(row, row_id) # Passa a linha e o ID
@@ -1419,121 +1476,269 @@ def extract_address_from_page(driver):
         return "Endereço de Entrega"
 
 def fill_solution_field(driver, form_modal, address):
-    """Preenche especificamente o campo Solución com o endereço."""
+    """Preenche especificamente o campo Solución com o endereço usando técnicas avançadas."""
     try:
-        logger.info("Tentando preencher o campo Solución...")
+        logger.info("Iniciando identificação super-específica do campo Solución...")
         
-        # Procura o campo de solução
+        # Salva screenshot inicial
+        save_screenshot(driver, "before_solution_search.png")
+        
+        # Lista para armazenar candidatos ao campo
         solution_fields = []
         
-        # Método 1: Por label exata
+        # === ESTRATÉGIA 1: Busca ULTRA-ESPECÍFICA por EXATAMENTE o campo Solución ===
         try:
-            solution_labels = driver.find_elements(By.XPATH, "//label[contains(text(), 'Solución') or contains(text(), 'Solucion') or contains(text(), 'solución') or contains(text(), 'solucion')]")
-            for label in solution_labels:
-                if label.is_displayed():
-                    logger.info(f"Label de solução encontrado: '{label.text}'")
-                    
-                    # Procura o campo de input associado ao label
-                    input_id = label.get_attribute("for")
-                    if input_id:
-                        try:
-                            solution_field = driver.find_element(By.ID, input_id)
-                            if solution_field.is_displayed():
-                                solution_fields.append(solution_field)
-                                logger.info("Campo de solução encontrado pelo ID do label")
-                        except:
-                            pass
-        except Exception as e:
-            logger.info(f"Erro ao buscar label 'Solución': {str(e)}")
-        
-        # Método 2: Encontrar qualquer input visível próximo à label
-        if not solution_fields:
-            try:
-                solution_labels = driver.find_elements(By.XPATH, "//*[contains(text(), 'Solución') or contains(text(), 'Solucion')]")
-                for label in solution_labels:
-                    if label.is_displayed():
-                        try:
-                            # Busca por inputs próximos ao label
-                            parent = label.find_element(By.XPATH, "./..")
-                            nearby_inputs = parent.find_elements(By.TAG_NAME, "input")
-                            for input_field in nearby_inputs:
-                                if input_field.is_displayed():
-                                    solution_fields.append(input_field)
-                                    logger.info("Campo de solução encontrado próximo ao label")
-                                    break
-                        except:
-                            pass
-            except Exception as e:
-                logger.info(f"Erro ao buscar inputs próximos à label 'Solución': {str(e)}")
-        
-        # Método 3: Encontrar o primeiro input visível vazio na página
-        if not solution_fields:
-            try:
-                inputs = form_modal.find_elements(By.TAG_NAME, "input")
-                for input_field in inputs:
+            logger.info("ESTRATÉGIA 1: Busca por padrões exatos de Solución")
+            
+            # Tenta localizar por ID exato primeiro (melhor caso)
+            id_candidates = ["solucion", "solution", "txtSolucion", "txtSolution", 
+                             "inputSolucion", "inputSolution"]
+            
+            for id_value in id_candidates:
+                try:
+                    field = driver.find_element(By.ID, id_value)
+                    if field.is_displayed():
+                        solution_fields.append(field)
+                        logger.info(f"Campo encontrado por ID exato: {id_value}")
+                        break
+                except:
+                    continue
+            
+            # Se não encontrou por ID, tenta localizar campos com name="solucion"
+            if not solution_fields:
+                for name_value in id_candidates:  # Mesmo padrão para name
                     try:
-                        if input_field.is_displayed() and not input_field.get_attribute("value"):
-                            # Verifica se não é um campo de nome, telefone ou código postal
-                            input_name = input_field.get_attribute("name") or ""
-                            input_id = input_field.get_attribute("id") or ""
-                            input_placeholder = input_field.get_attribute("placeholder") or ""
-                            
-                            # Ignora campos específicos
-                            skip_keywords = ["name", "nombre", "phone", "telefono", "postal", "código", "address", "dirección"]
-                            should_skip = False
-                            
-                            for keyword in skip_keywords:
-                                if (keyword.lower() in input_name.lower() or 
-                                    keyword.lower() in input_id.lower() or 
-                                    keyword.lower() in input_placeholder.lower()):
-                                    should_skip = True
-                                    break
-                            
-                            if not should_skip:
-                                solution_fields.append(input_field)
-                                logger.info("Usando primeiro campo vazio disponível para solução")
-                                break
+                        field = driver.find_element(By.NAME, name_value)
+                        if field.is_displayed():
+                            solution_fields.append(field)
+                            logger.info(f"Campo encontrado por name exato: {name_value}")
+                            break
                     except:
                         continue
-            except Exception as e:
-                logger.info(f"Erro ao buscar primeiro input vazio: {str(e)}")
+        except Exception as e1:
+            logger.warning(f"Erro na estratégia 1: {e1}")
         
-        # Se encontrou algum campo para solução, preenche com o endereço
-        if solution_fields:
-            solution_field = solution_fields[0]
+        # === ESTRATÉGIA 2: Busca pela LABEL mais próxima ===
+        if not solution_fields:
+            try:
+                logger.info("ESTRATÉGIA 2: Buscando pela label 'Solución' ou similar")
+                
+                # Tenta encontrar qualquer label que contenha "Solución" ou variante
+                solution_labels = driver.find_elements(By.XPATH, 
+                    "//label[contains(translate(text(), 'SOLUCIÓN', 'solucion'), 'solucion')]")
+                
+                for label in solution_labels:
+                    if label.is_displayed():
+                        logger.info(f"Label encontrada: '{label.text}'")
+                        
+                        # Verifica se a label tem atributo 'for' que aponta para um input
+                        for_attr = label.get_attribute("for")
+                        if for_attr:
+                            try:
+                                field = driver.find_element(By.ID, for_attr)
+                                if field.is_displayed():
+                                    solution_fields.append(field)
+                                    logger.info(f"Campo encontrado pelo atributo for='{for_attr}'")
+                                    break
+                            except:
+                                pass
+                        
+                        # Se não tem 'for', tenta encontrar input/textarea próximo
+                        if not solution_fields:
+                            try:
+                                # Usa JavaScript para encontrar o campo mais próximo
+                                field = driver.execute_script("""
+                                    var label = arguments[0];
+                                    // Tenta encontrar o próximo elemento após a label
+                                    var next = label.nextElementSibling;
+                                    if (next && (next.tagName === 'INPUT' || next.tagName === 'TEXTAREA')) {
+                                        return next;
+                                    }
+                                    // Tenta encontrar dentro do pai
+                                    var parent = label.parentElement;
+                                    var inputs = parent.querySelectorAll('input, textarea');
+                                    for (var i = 0; i < inputs.length; i++) {
+                                        if (inputs[i] !== label) {
+                                            return inputs[i];
+                                        }
+                                    }
+                                    return null;
+                                """, label)
+                                
+                                if field and field.is_displayed():
+                                    solution_fields.append(field)
+                                    logger.info(f"Campo encontrado próximo à label via JavaScript")
+                                    break
+                            except Exception as e_js:
+                                logger.warning(f"Erro ao buscar campo via JavaScript: {e_js}")
+            except Exception as e2:
+                logger.warning(f"Erro na estratégia 2: {e2}")
+        
+        # === ESTRATÉGIA 3: EXAMINAR TODOS OS TEXTAREAS ===
+        if not solution_fields:
+            try:
+                logger.info("ESTRATÉGIA 3: Examinando todas as textareas")
+                
+                textareas = driver.find_elements(By.TAG_NAME, "textarea")
+                logger.info(f"Encontradas {len(textareas)} textareas")
+                
+                # Primeira passagem: procura por textareas vazias e visíveis
+                for textarea in textareas:
+                    if textarea.is_displayed():
+                        value = textarea.get_attribute("value") or ""
+                        placeholder = textarea.get_attribute("placeholder") or ""
+                        
+                        logger.info(f"Textarea: placeholder='{placeholder}', valor='{value[:20] + '...' if len(value) > 20 else value}'")
+                        
+                        # Prioriza textareas vazias ou com placeholder de solução
+                        if not value or "solu" in placeholder.lower():
+                            solution_fields.append(textarea)
+                            logger.info("Textarea vazia encontrada")
+                            break
+                
+                # Se não encontrou nenhuma textarea vazia, pega a primeira visível
+                if not solution_fields and textareas:
+                    for textarea in textareas:
+                        if textarea.is_displayed():
+                            solution_fields.append(textarea)
+                            logger.info("Usando primeira textarea visível")
+                            break
+            except Exception as e3:
+                logger.warning(f"Erro na estratégia 3: {e3}")
+        
+        # === ESTRATÉGIA 4: BUSCA PELO DOM COMPLETO ===
+        if not solution_fields:
+            try:
+                logger.info("ESTRATÉGIA 4: Busca por qualquer elemento editável na modal")
+                
+                # Busca diretamente usando JavaScript para encontrar campos editáveis na modal atual
+                fields = driver.execute_script("""
+                    // Tenta encontrar o modal ativo
+                    var modal = document.querySelector('.modal.show, ngb-modal-window.show');
+                    if (!modal) return [];
+                    
+                    // Procura todos os campos editáveis no modal
+                    return Array.from(modal.querySelectorAll('input[type="text"], textarea'))
+                      .filter(el => el.offsetParent !== null);  // Apenas elementos visíveis
+                """)
+                
+                if fields and len(fields) > 0:
+                    logger.info(f"Encontrados {len(fields)} campos via JavaScript")
+                    solution_fields.append(fields[0])
+            except Exception as e4:
+                logger.warning(f"Erro na estratégia 4: {e4}")
+        
+        # Diagnóstico final após todas as tentativas
+        if not solution_fields:
+            logger.error("ALERTA! Nenhum campo de solução encontrado após múltiplas estratégias")
+            save_screenshot(driver, "no_solution_field.png")
             
-            # Verifica se o campo está vazio antes de preencher
-            if not solution_field.get_attribute("value"):
-                # Rola até o elemento
-                driver.execute_script("arguments[0].scrollIntoView(true);", solution_field)
-                time.sleep(0.5)
+            # Salva a estrutura HTML atual para análise
+            try:
+                import os
+                html_dir = "debug_html"
+                if not os.path.exists(html_dir):
+                    os.makedirs(html_dir)
                 
-                # Limpa o campo e preenche com o endereço
-                solution_field.clear()
-                time.sleep(0.5)
-                
-                # Preenche usando JavaScript para maior confiabilidade
-                driver.execute_script(f"arguments[0].value = '{address}';", solution_field)
-                
-                # Também tenta o método padrão
-                solution_field.send_keys(address)
-                
-                logger.info(f"Campo Solución preenchido com o endereço: {address}")
-                
-                # Verifica se o preenchimento funcionou
-                actual_value = solution_field.get_attribute("value")
-                logger.info(f"Valor atual do campo após preenchimento: '{actual_value}'")
-                
-                return True
-            else:
-                logger.info("Campo Solución já está preenchido, não foi modificado")
-                return True
-        else:
-            logger.warning("Não foi possível encontrar o campo Solución")
+                with open(f"{html_dir}/page_structure_{datetime.datetime.now().strftime('%H%M%S')}.html", "w", encoding="utf-8") as f:
+                    f.write(driver.page_source)
+                logger.info(f"HTML salvo em {html_dir} para análise")
+            except Exception as e_save:
+                logger.error(f"Erro ao salvar HTML: {e_save}")
+            
             return False
+        
+        # Preenche o campo encontrado
+        solution_field = solution_fields[0]  # Pega o primeiro campo encontrado
+        
+        # Destaca o campo encontrado para verificação visual
+        try:
+            driver.execute_script("""
+                arguments[0].style.border = '3px solid red';
+                arguments[0].style.backgroundColor = 'yellow';
+            """, solution_field)
+            save_screenshot(driver, "solution_field_found.png")
+        except:
+            pass
+        
+        # Agora tenta preencher o campo de MÚLTIPLAS maneiras
+        filled = False
+        
+        # Método 1: Limpar e preencher direto com JavaScript
+        try:
+            logger.info("Tentando preencher via JavaScript...")
+            
+            # Escapa caracteres especiais para o JavaScript
+            safe_address = address.replace("'", "\\'").replace("\\", "\\\\")
+            
+            driver.execute_script("""
+                var field = arguments[0];
+                var text = arguments[1];
+                
+                // Limpa o campo
+                field.value = '';
+                
+                // Define o novo valor
+                field.value = text;
+                
+                // Dispara eventos para garantir que a aplicação reconheça a mudança
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                // Dá foco ao campo para garantir que está ativo
+                field.focus();
+            """, solution_field, safe_address)
+            
+            time.sleep(0.5)
+            value = solution_field.get_attribute("value")
+            logger.info(f"Valor após preenchimento JS: '{value}'")
+            
+            if value and value.strip():
+                filled = True
+                logger.info("Campo preenchido com sucesso via JavaScript")
+        except Exception as e_js:
+            logger.warning(f"Erro ao preencher via JavaScript: {e_js}")
+        
+        # Método 2: Selenium padrão (se o JS falhou)
+        if not filled:
+            try:
+                logger.info("Tentando preencher via Selenium padrão...")
+                
+                # Rola para o campo
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", solution_field)
+                time.sleep(0.5)
+                
+                # Clica para garantir foco
+                solution_field.click()
+                time.sleep(0.5)
+                
+                # Limpa e preenche
+                solution_field.clear()
+                time.sleep(0.3)
+                solution_field.send_keys(address)
+                time.sleep(0.5)
+                
+                value = solution_field.get_attribute("value")
+                logger.info(f"Valor após preenchimento Selenium: '{value}'")
+                
+                if value and value.strip():
+                    filled = True
+                    logger.info("Campo preenchido com sucesso via Selenium")
+            except Exception as e_sel:
+                logger.warning(f"Erro ao preencher via Selenium: {e_sel}")
+        
+        # Verifica o resultado final
+        time.sleep(0.5)
+        value = solution_field.get_attribute("value")
+        logger.info(f"RESULTADO FINAL | Campo contém: '{value}'")
+        save_screenshot(driver, "after_fill_solution.png")
+        
+        return filled
             
     except Exception as e:
-        logger.error(f"Erro ao preencher campo Solución: {str(e)}")
+        logger.error(f"Erro crítico ao preencher campo Solución: {str(e)}")
+        logger.error(traceback.format_exc())
+        save_screenshot(driver, "critical_error_fill.png")
         return False
 
 def click_save_button(driver):
@@ -1693,6 +1898,32 @@ def check_and_close_tabs():
             logger.info(f"Fechadas {len(handles) - 1} guias extras")
     except Exception as e:
         logger.error(f"Erro ao verificar e fechar guias: {str(e)}")
+
+def save_screenshot(driver, filename, subdir="screenshots"):
+    """Salva screenshot em uma pasta dedicada.
+    
+    Args:
+        driver: WebDriver do Selenium
+        filename: Nome do arquivo
+        subdir: Subdiretório para salvar (padrão: screenshots)
+    """
+    try:
+        # Garante que a pasta existe
+        import os
+        if not os.path.exists(subdir):
+            os.makedirs(subdir)
+            logger.info(f"Pasta '{subdir}' criada para screenshots")
+        
+        # Caminho completo para o arquivo
+        filepath = os.path.join(subdir, filename)
+        
+        # Salva o screenshot
+        driver.save_screenshot(filepath)
+        logger.info(f"Screenshot salvo: {filepath}")
+        return True
+    except Exception as e:
+        logger.error(f"Erro ao salvar screenshot '{filename}': {str(e)}")
+        return False
 
 def generate_report():
     """Gera um relatório da execução e salva no banco de dados."""

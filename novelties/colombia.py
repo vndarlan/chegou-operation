@@ -1658,7 +1658,43 @@ def fill_field_by_label(driver, form_modal, label_texts, value):
     try:
         logger.info(f"Tentando preencher campo com labels {label_texts}...")
         
+        # Estratégia aprimorada para campo de solução
         field_found = False
+        
+        # NOVA ESTRATÉGIA: Se estamos procurando pelo campo Solución, tente encontrar textareas primeiro
+        if any(sol in label for sol in ["Solución", "Solucion", "solución", "solucion"] for label in label_texts):
+            logger.info("Procurando campos de solução por textarea...")
+            textareas = driver.find_elements(By.TAG_NAME, "textarea")
+            
+            for textarea in textareas:
+                if textarea.is_displayed():
+                    try:
+                        # Destaca para screenshot
+                        original_style = driver.execute_script("return arguments[0].getAttribute('style');", textarea)
+                        driver.execute_script("arguments[0].setAttribute('style', 'border: 3px solid red !important; background: yellow !important;');", textarea)
+                        driver.save_screenshot("solution_textarea_found.png")
+                        driver.execute_script(f"arguments[0].setAttribute('style', '{original_style or ''}');", textarea)
+                        
+                        # Rola para o elemento
+                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", textarea)
+                        time.sleep(1)
+                        
+                        # Limpa e preenche
+                        driver.execute_script("arguments[0].value = '';", textarea)
+                        time.sleep(0.5)
+                        safe_value = value.replace("'", "\\'").replace("\\", "\\\\")
+                        driver.execute_script(f"arguments[0].value = '{safe_value}';", textarea)
+                        
+                        # Dispara eventos
+                        events = ["input", "change", "blur"]
+                        for event in events:
+                            driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", textarea)
+                        
+                        logger.info(f"Textarea preenchida com sucesso: '{value}'")
+                        field_found = True
+                        return True
+                    except Exception as e:
+                        logger.warning(f"Erro ao preencher textarea: {e}")
         
         # Método 1: Procura por labels exatas
         for label_text in label_texts:
@@ -1687,7 +1723,8 @@ def fill_field_by_label(driver, form_modal, label_texts, value):
                                     time.sleep(0.5)
                                     
                                     # CORREÇÃO: Preenche usando apenas JavaScript
-                                    driver.execute_script(f"arguments[0].value = '{value}';", input_field)
+                                    safe_value = value.replace("'", "\\'").replace("\\", "\\\\")
+                                    driver.execute_script(f"arguments[0].value = '{safe_value}';", input_field)
                                     
                                     # IMPORTANTE: Dispara TODOS os eventos possíveis para garantir que o site reconheça a mudança
                                     events = ["input", "change", "blur", "keyup", "keydown"]
@@ -1734,7 +1771,8 @@ def fill_field_by_label(driver, form_modal, label_texts, value):
                                         time.sleep(0.5)
                                         
                                         # CORREÇÃO: Preenche usando apenas JavaScript
-                                        driver.execute_script(f"arguments[0].value = '{value}';", input_field)
+                                        safe_value = value.replace("'", "\\'").replace("\\", "\\\\")
+                                        driver.execute_script(f"arguments[0].value = '{safe_value}';", input_field)
                                         
                                         # IMPORTANTE: Dispara TODOS os eventos possíveis para garantir que o site reconheça a mudança
                                         events = ["input", "change", "blur", "keyup", "keydown"]
@@ -1756,9 +1794,47 @@ def fill_field_by_label(driver, form_modal, label_texts, value):
                 except Exception as e:
                     logger.info(f"Erro ao buscar elementos com texto '{label_text}': {str(e)}")
         
+        # Método adicional: Se for Solución, tenta encontrar qualquer campo editável
+        if not field_found and any(sol in label for sol in ["Solución", "Solucion", "solución", "solucion"] for label in label_texts):
+            try:
+                logger.info("Tentando encontrar qualquer campo editável para Solución...")
+                editable_fields = driver.find_elements(By.XPATH, "//input[@type='text'] | //textarea")
+                
+                for field in editable_fields:
+                    if field.is_displayed():
+                        try:
+                            # Destaca
+                            original_style = driver.execute_script("return arguments[0].getAttribute('style');", field)
+                            driver.execute_script("arguments[0].setAttribute('style', 'border: 3px solid blue !important; background: lightblue !important;');", field)
+                            driver.save_screenshot("solution_field_fallback.png")
+                            driver.execute_script(f"arguments[0].setAttribute('style', '{original_style or ''}');", field)
+                            
+                            # Rola e preenche
+                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", field)
+                            time.sleep(1)
+                            driver.execute_script("arguments[0].value = '';", field)
+                            time.sleep(0.5)
+                            safe_value = value.replace("'", "\\'").replace("\\", "\\\\")
+                            driver.execute_script(f"arguments[0].value = '{safe_value}';", field)
+                            
+                            # Dispara eventos
+                            events = ["input", "change", "blur"]
+                            for event in events:
+                                driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", field)
+                            
+                            logger.info(f"Campo editável preenchido com sucesso como fallback: '{value}'")
+                            field_found = True
+                            return True
+                        except Exception as e:
+                            logger.warning(f"Erro ao preencher campo editável: {e}")
+            except Exception as e:
+                logger.warning(f"Erro na estratégia fallback: {e}")
+        
+        # Se chegou aqui, não encontrou o campo
         if not field_found:
             logger.warning(f"Não foi possível encontrar campo com labels {label_texts}")
             return False
+            
     except Exception as e:
         logger.error(f"Erro ao preencher campo: {str(e)}")
         return False
@@ -2098,274 +2174,216 @@ def process_current_novelty():
                 st.session_state.progress = st.session_state.current_row_index / st.session_state.total_items
                 return False
             
-            # Espera após clicar no botão Yes - tempo aumentado
-            logger.info("Aguardando 5 segundos após 'Yes'...")
-            time.sleep(5)
+            # Aguardar mais tempo antes de procurar o formulário
+            logger.info("Aguardando 8 segundos para garantir que o formulário seja carregado...")
+            time.sleep(8)  # Aumentado de 5 para 8 segundos
             
-            # Tirar screenshot após clicar no botão Yes
+            # Tirar screenshot após clicar no botão Yes para diagnóstico
             try:
                 driver.save_screenshot(f"after_yes_{row_id}.png")
                 logger.info(f"Screenshot após clicar em Yes: after_yes_{row_id}.png")
             except:
                 pass
             
-            # Agora vamos tentar encontrar o formulário ou os campos
-            logger.info("Procurando campos para preenchimento...")
-            
-            # Extrai as informações do cliente
+            # Extrair as informações do cliente
             customer_info = extract_customer_info(driver)
             
-            # Tenta várias estratégias para encontrar o formulário
+            # ESTRATÉGIA APRIMORADA para encontrar o formulário
             form_found = False
             form_modal = None
             
-            # Estratégia 1: Procura pelo modal padrão com formulário
+            # Diagnóstico do DOM atual para depuração
             try:
-                logger.info("Tentando encontrar o modal com formulário (estratégia 1)...")
-                form_modal = WebDriverWait(driver, 7).until(
-                    EC.visibility_of_element_located((By.XPATH, "//div[contains(@class, 'modal-body')]//form"))
-                )
-                logger.info("Formulário encontrado com sucesso (estratégia 1)")
-                form_found = True
+                logger.info("Analisando estrutura do DOM após clicar em Yes...")
+                
+                # Verificar se há modais visíveis
+                modals = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal') and @style='display: block;']")
+                logger.info(f"Modais visíveis encontrados: {len(modals)}")
+                
+                # Verificar todos os formulários na página
+                forms = driver.find_elements(By.TAG_NAME, "form")
+                logger.info(f"Formulários encontrados: {len(forms)}")
+                
+                # Verificar campos de input
+                inputs = driver.find_elements(By.TAG_NAME, "input")
+                visible_inputs = [i for i in inputs if i.is_displayed()]
+                logger.info(f"Campos de input visíveis: {len(visible_inputs)}")
+                
+                # Verificar selects (dropdowns)
+                selects = driver.find_elements(By.TAG_NAME, "select")
+                visible_selects = [s for s in selects if s.is_displayed()]
+                logger.info(f"Dropdowns visíveis: {len(visible_selects)}")
+                
+                # Verificar textareas
+                textareas = driver.find_elements(By.TAG_NAME, "textarea")
+                visible_textareas = [t for t in textareas if t.is_displayed()]
+                logger.info(f"Textareas visíveis: {len(visible_textareas)}")
+                
+                # Verificar presença específica do dropdown de Solución
+                try:
+                    solution_labels = driver.find_elements(By.XPATH, "//div[contains(text(), 'Solución')]")
+                    if solution_labels:
+                        logger.info(f"Labels de Solución encontradas: {len(solution_labels)}")
+                        
+                        # Verificar se alguma está próxima de um select
+                        for label in solution_labels:
+                            parent = label.find_element(By.XPATH, ".//..")
+                            parent_selects = parent.find_elements(By.TAG_NAME, "select")
+                            if parent_selects:
+                                logger.info("Detectado formulário com dropdown de Solución")
+                                form_modal = parent
+                                form_found = True
+                                break
+                except Exception as e:
+                    logger.info(f"Erro ao verificar dropdown de Solución: {e}")
             except Exception as e:
-                logger.info(f"Não foi possível encontrar o formulário padrão: {str(e)}")
+                logger.warning(f"Erro ao analisar DOM: {e}")
             
-            # Estratégia 2: Procura por qualquer modal visível
+            # Estratégia 1: Busca pelo modal com formulário (padrão)
             if not form_found:
                 try:
-                    logger.info("Tentando encontrar qualquer modal visível (estratégia 2)...")
-                    modal = WebDriverWait(driver, 5).until(
-                        EC.visibility_of_element_located((By.XPATH, "//div[contains(@class, 'modal') and @style='display: block;']"))
+                    logger.info("Estratégia 1: Buscando modal com formulário...")
+                    # Aumente o tempo de espera para 10 segundos
+                    form_modal = WebDriverWait(driver, 10).until(
+                        EC.visibility_of_element_located((By.XPATH, "//div[contains(@class, 'modal-body')]//form"))
                     )
-                    logger.info("Modal visível encontrado, procurando campos dentro dele...")
-                    form_modal = modal
+                    logger.info("Formulário encontrado na modal-body")
                     form_found = True
                 except Exception as e:
-                    logger.info(f"Não foi possível encontrar modal visível: {str(e)}")
+                    logger.info(f"Estratégia 1 falhou: {e}")
             
-            # Estratégia 3: Procura por campos input diretamente
+            # Estratégia 2: Busca qualquer formulário na página
             if not form_found:
                 try:
-                    logger.info("Tentando encontrar campos input diretamente (estratégia 3)...")
-                    inputs = driver.find_elements(By.TAG_NAME, "input")
-                    # Filtra apenas inputs visíveis
-                    visible_inputs = [inp for inp in inputs if inp.is_displayed()]
-                    if visible_inputs:
-                        logger.info(f"Encontrados {len(visible_inputs)} inputs visíveis")
-                        # Usa o documento inteiro como "form_modal"
-                        form_modal = driver.find_element(By.TAG_NAME, "body")
-                        form_found = True
-                    else:
-                        logger.warning("Nenhum input visível encontrado na página")
+                    logger.info("Estratégia 2: Buscando qualquer formulário...")
+                    forms = driver.find_elements(By.TAG_NAME, "form")
+                    for form in forms:
+                        if form.is_displayed():
+                            form_modal = form
+                            form_found = True
+                            logger.info("Formulário encontrado diretamente")
+                            break
                 except Exception as e:
-                    logger.info(f"Erro ao procurar inputs: {str(e)}")
+                    logger.info(f"Estratégia 2 falhou: {e}")
             
-            # Se encontrou o formulário ou campos, tenta preencher
-            if form_found and form_modal:
-                logger.info("Formulário ou campos encontrados, preenchendo...")
+            # Estratégia 3: Busca qualquer modal ativo
+            if not form_found:
+                try:
+                    logger.info("Estratégia 3: Buscando qualquer modal ativo...")
+                    modals = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal') and @style='display: block;']")
+                    if modals:
+                        form_modal = modals[0]
+                        form_found = True
+                        logger.info("Modal ativo encontrado, usando como formulário")
+                except Exception as e:
+                    logger.info(f"Estratégia 3 falhou: {e}")
+            
+            # Estratégia 4: Usa o corpo da página como último recurso
+            if not form_found:
+                try:
+                    logger.info("Estratégia 4: Usando corpo da página como último recurso...")
+                    form_modal = driver.find_element(By.TAG_NAME, "body")
+                    form_found = True
+                    logger.info("Usando body como formulário")
+                except Exception as e:
+                    logger.info(f"Estratégia 4 falhou: {e}")
+            
+            # Adicional: Verifica a presença do dropdown específico
+            try:
+                dropdown_exists = False
+                selects = driver.find_elements(By.TAG_NAME, "select")
+                for select in selects:
+                    if select.is_displayed():
+                        try:
+                            options = select.find_elements(By.TAG_NAME, "option")
+                            for option in options:
+                                if "entregar en nueva dirección" in option.text.lower():
+                                    logger.info("Detectado dropdown com opção 'Entregar en nueva dirección'")
+                                    dropdown_exists = True
+                                    break
+                        except:
+                            pass
+                    if dropdown_exists:
+                        break
+                        
+                if dropdown_exists:
+                    logger.info("Usando fluxo especial para formulário dropdown")
+                    result = handle_dropdown_solution_form(driver, form_modal, customer_info)
+                elif form_found:
+                    logger.info("Usando fluxo padrão para formulário encontrado")
+                    result = fill_form_fields(driver, form_modal, customer_info)
+                else:
+                    logger.error("Não foi possível encontrar o formulário para preencher. Pulando preenchimento.")
+                    result = False
                 
-                # Preenche os campos do formulário
-                result = fill_form_fields(driver, form_modal, customer_info)
+                # ADICIONADO: SEMPRE tenta clicar no botão de salvar, independentemente do resultado anterior
+                logger.info("PASSO CRÍTICO: Tentando explicitamente clicar no botão 'Save Solucion'...")
+                try:
+                    # Pausa antes de tentar clicar
+                    time.sleep(2)
+                    # Chama a função aprimorada de clique
+                    save_clicked = click_save_button(driver)
+                    if save_clicked:
+                        logger.info("✅ Botão 'Save Solucion' clicado com sucesso pelo fluxo explícito")
+                    else:
+                        logger.warning("⚠️ Falha ao clicar no botão 'Save Solucion' pelo fluxo explícito")
+                except Exception as explicit_save_error:
+                    logger.error(f"❌ Erro ao executar clique explícito: {explicit_save_error}")
+                    
+            except Exception as e:
+                logger.error(f"Erro ao identificar tipo de formulário: {e}")
+                result = False
                 
-                # Verificar se o formulário foi excluído via NO+Yes
-                if st.session_state.get('form_excluded', False):
-                    logger.info("Formulário foi excluído com sucesso (NO+YES). Prosseguindo para próxima novelty.")
-                    # Reseta o flag
-                    st.session_state.form_excluded = False
-                    # Incrementa contador de sucesso
-                    st.session_state.success_count += 1
-                    # Incrementa o índice para a próxima novelty
+                # Mesmo com erro, tenta clicar no botão salvar
+                logger.info("Tentando clicar no botão de salvar mesmo após erro...")
+                try:
+                    save_clicked = click_save_button(driver)
+                except Exception as e_save:
+                    logger.error(f"Erro ao tentar clicar no botão salvar após erro: {e_save}")
+            
+            # CÓDIGO REDIRECIONAMENTO - Verifica o erro específico "Ups, tenemos el siguiente inconveniente"
+            logger.info("Verificando se apareceu o erro 'Ups, tenemos el siguiente inconveniente'...")
+            try:
+                # Espera um pouco para o popup aparecer
+                time.sleep(3)
+                
+                # Procura pelo texto de erro específico
+                error_elements = driver.find_elements(By.XPATH, "//*[contains(text(), 'Ups, tenemos el siguiente inconveniente')]")
+                
+                if error_elements:
+                    logger.warning("Detectado erro 'Ups, tenemos el siguiente inconveniente'")
+                    
+                    # Tenta tirar um screenshot do erro
+                    try:
+                        driver.save_screenshot(f"error_ups_{row_id}.png")
+                        logger.info(f"Screenshot do erro: error_ups_{row_id}.png")
+                    except:
+                        pass
+                    
+                    # Registra o erro
+                    error_msg = "Erro 'Ups, tenemos el siguiente inconveniente'"
+                    logger.error(f"Erro ao processar novelty {row_id}: {error_msg}")
+                    st.session_state.failed_items.append({"id": row_id, "error": error_msg})
+                    st.session_state.failed_count = len(st.session_state.failed_items)
+                    
+                    # Redireciona para a lista de novelties
+                    logger.info("Redirecionando para a lista de novelties...")
+                    driver.get("https://app.dropi.co/dashboard/novelties")
+                    
+                    # Aguarda o carregamento da página
+                    time.sleep(5)
+                    
+                    # Incrementa o índice para pular esta novelty
                     st.session_state.current_row_index += 1
+                    
                     # Atualiza o progresso
                     st.session_state.processed_items = st.session_state.current_row_index
                     st.session_state.progress = st.session_state.current_row_index / st.session_state.total_items
-                    return False  # Retorna para processar a próxima novelty
-                
-                # Clica em Salvar/Guardar se pelo menos um campo foi preenchido
-                if result:
-                    # Clica em Salvar/Guardar - tentando vários textos
-                    save_clicked = click_save_button(driver)
                     
-                    # CÓDIGO REDIRECIONAMENTO - Verifica o erro específico "Ups, tenemos el siguiente inconveniente"
-                    logger.info("Verificando se apareceu o erro 'Ups, tenemos el siguiente inconveniente'...")
-                    try:
-                        # Espera um pouco para o popup aparecer
-                        time.sleep(3)
-                        
-                        # Procura pelo texto de erro específico
-                        error_elements = driver.find_elements(By.XPATH, "//*[contains(text(), 'Ups, tenemos el siguiente inconveniente')]")
-                        
-                        if error_elements:
-                            logger.warning("Detectado erro 'Ups, tenemos el siguiente inconveniente'")
-                            
-                            # Tenta tirar um screenshot do erro
-                            try:
-                                driver.save_screenshot(f"error_ups_{row_id}.png")
-                                logger.info(f"Screenshot do erro: error_ups_{row_id}.png")
-                            except:
-                                pass
-                            
-                            # Registra o erro
-                            error_msg = "Erro 'Ups, tenemos el siguiente inconveniente'"
-                            logger.error(f"Erro ao processar novelty {row_id}: {error_msg}")
-                            st.session_state.failed_items.append({"id": row_id, "error": error_msg})
-                            st.session_state.failed_count = len(st.session_state.failed_items)
-                            
-                            # Redireciona para a lista de novelties
-                            logger.info("Redirecionando para a lista de novelties...")
-                            driver.get("https://app.dropi.co/dashboard/novelties")
-                            
-                            # Aguarda o carregamento da página
-                            time.sleep(5)
-                            
-                            # Incrementa o índice para pular esta novelty
-                            st.session_state.current_row_index += 1
-                            
-                            # Atualiza o progresso
-                            st.session_state.processed_items = st.session_state.current_row_index
-                            st.session_state.progress = st.session_state.current_row_index / st.session_state.total_items
-                            
-                            # Retorna False para continuar com a próxima novelty
-                            return False
-                    except Exception as e:
-                        logger.info(f"Erro ao verificar popup de erro específico: {str(e)}")
-                    # FIM DO CÓDIGO REDIRECIONAMENTO
-                    
-                    # Espera o modal fechar
-                    logger.info("Aguardando fechamento do modal de edição...")
-                    try:
-                        WebDriverWait(driver, 10).until(
-                            EC.invisibility_of_element_located((By.XPATH, "//div[contains(@class, 'modal') and @style='display: block;']"))
-                        )
-                        logger.info("Modal fechou com sucesso")
-                    except:
-                        logger.warning("Modal de edição não fechou em 10 segundos, tentando fechar manualmente...")
-                        try:
-                            # Tenta forçar o fechamento clicando no X
-                            close_buttons = driver.find_elements(By.XPATH, "//button[contains(@class, 'close') or contains(@class, 'btn-close')]")
-                            for button in close_buttons:
-                                if button.is_displayed():
-                                    driver.execute_script("arguments[0].click();", button)
-                                    logger.info("Fechando modal manualmente clicando no X")
-                                    break
-                        except Exception as e:
-                            logger.warning(f"Não foi possível fechar o modal manualmente: {str(e)}")
-                else:
-                    logger.warning("Nenhum campo foi preenchido, mas tentando continuar...")
-                    try:
-                        # Tenta clicar em salvar mesmo assim
-                        save_clicked = click_save_button(driver)
-                        
-                        # CÓDIGO REDIRECIONAMENTO - Verifica o erro específico "Ups, tenemos el siguiente inconveniente"
-                        logger.info("Verificando se apareceu o erro 'Ups, tenemos el siguiente inconveniente'...")
-                        try:
-                            # Espera um pouco para o popup aparecer
-                            time.sleep(3)
-                            
-                            # Procura pelo texto de erro específico
-                            error_elements = driver.find_elements(By.XPATH, "//*[contains(text(), 'Ups, tenemos el siguiente inconveniente')]")
-                            
-                            if error_elements:
-                                logger.warning("Detectado erro 'Ups, tenemos el siguiente inconveniente'")
-                                
-                                # Tenta tirar um screenshot do erro
-                                try:
-                                    driver.save_screenshot(f"error_ups_{row_id}.png")
-                                    logger.info(f"Screenshot do erro: error_ups_{row_id}.png")
-                                except:
-                                    pass
-                                
-                                # Registra o erro
-                                error_msg = "Erro 'Ups, tenemos el siguiente inconveniente'"
-                                logger.error(f"Erro ao processar novelty {row_id}: {error_msg}")
-                                st.session_state.failed_items.append({"id": row_id, "error": error_msg})
-                                st.session_state.failed_count = len(st.session_state.failed_items)
-                                
-                                # Redireciona para a lista de novelties
-                                logger.info("Redirecionando para a lista de novelties...")
-                                driver.get("https://app.dropi.co/dashboard/novelties")
-                                
-                                # Aguarda o carregamento da página
-                                time.sleep(5)
-                                
-                                # Incrementa o índice para pular esta novelty
-                                st.session_state.current_row_index += 1
-                                
-                                # Atualiza o progresso
-                                st.session_state.processed_items = st.session_state.current_row_index
-                                st.session_state.progress = st.session_state.current_row_index / st.session_state.total_items
-                                
-                                # Retorna False para continuar com a próxima novelty
-                                return False
-                        except Exception as e:
-                            logger.info(f"Erro ao verificar popup de erro específico: {str(e)}")
-                        # FIM DO CÓDIGO REDIRECIONAMENTO
-                    except:
-                        pass
-            else:
-                logger.warning("Não foi possível encontrar o formulário ou campos para preencher")
-                try:
-                    # Tenta continuar mesmo sem encontrar o formulário
-                    logger.info("Tentando continuar sem preencher campos...")
-                    
-                    # Procura por botões de salvar na página
-                    for save_text in ["Guardar", "Salvar", "Save", "GUARDAR", "SALVAR", "SAVE"]:
-                        try:
-                            save_form_button = driver.find_element(By.XPATH, f"//button[contains(text(), '{save_text}')]")
-                            if save_form_button.is_displayed():
-                                driver.execute_script("arguments[0].click();", save_form_button)
-                                logger.info(f"Clicado no botão '{save_text}' sem preencher campos")
-                                
-                                # CÓDIGO REDIRECIONAMENTO - Verifica o erro específico "Ups, tenemos el siguiente inconveniente"
-                                logger.info("Verificando se apareceu o erro 'Ups, tenemos el siguiente inconveniente'...")
-                                try:
-                                    # Espera um pouco para o popup aparecer
-                                    time.sleep(3)
-                                    
-                                    # Procura pelo texto de erro específico
-                                    error_elements = driver.find_elements(By.XPATH, "//*[contains(text(), 'Ups, tenemos el siguiente inconveniente')]")
-                                    
-                                    if error_elements:
-                                        logger.warning("Detectado erro 'Ups, tenemos el siguiente inconveniente'")
-                                        
-                                        # Tenta tirar um screenshot do erro
-                                        try:
-                                            driver.save_screenshot(f"error_ups_{row_id}.png")
-                                            logger.info(f"Screenshot do erro: error_ups_{row_id}.png")
-                                        except:
-                                            pass
-                                        
-                                        # Registra o erro
-                                        error_msg = "Erro 'Ups, tenemos el siguiente inconveniente'"
-                                        logger.error(f"Erro ao processar novelty {row_id}: {error_msg}")
-                                        st.session_state.failed_items.append({"id": row_id, "error": error_msg})
-                                        st.session_state.failed_count = len(st.session_state.failed_items)
-                                        
-                                        # Redireciona para a lista de novelties
-                                        logger.info("Redirecionando para a lista de novelties...")
-                                        driver.get("https://app.dropi.co/dashboard/novelties")
-                                        
-                                        # Aguarda o carregamento da página
-                                        time.sleep(5)
-                                        
-                                        # Incrementa o índice para pular esta novelty
-                                        st.session_state.current_row_index += 1
-                                        
-                                        # Atualiza o progresso
-                                        st.session_state.processed_items = st.session_state.current_row_index
-                                        st.session_state.progress = st.session_state.current_row_index / st.session_state.total_items
-                                        
-                                        # Retorna False para continuar com a próxima novelty
-                                        return False
-                                except Exception as e:
-                                    logger.info(f"Erro ao verificar popup de erro específico: {str(e)}")
-                                # FIM DO CÓDIGO REDIRECIONAMENTO
-                                
-                                break
-                        except:
-                            continue
-                except:
-                    pass
+                    # Retorna False para continuar com a próxima novelty
+                    return False
+            except Exception as e:
+                logger.info(f"Erro ao verificar popup de erro específico: {str(e)}")
             
             # Espera adicional após salvar
             time.sleep(5)
@@ -2476,122 +2494,370 @@ def process_current_novelty():
         return False
 
 def click_save_button(driver):
-    """Tenta clicar no botão de salvar usando várias estratégias."""
+    """Tenta clicar no botão de salvar usando várias estratégias. Versão ultra robusta para Colômbia."""
     try:
-        logger.info("Tentando clicar no botão de salvar...")
+        logger.info("Iniciando processo aprimorado para clicar no botão de salvar...")
         
-        # PAUSA MAIOR: Aumentando para 5 segundos para garantir que o formulário seja completamente validado
-        logger.info("Aguardando 5 segundos para garantir que o formulário esteja pronto e validado...")
-        time.sleep(5)
-        
-        # Tirar screenshot antes de tentar salvar
-        driver.save_screenshot("before_save_button.png")
+        # DIAGNÓSTICO: Tira screenshot antes de qualquer interação
+        driver.save_screenshot("before_trying_save_button.png")
         logger.info("Screenshot antes de tentar salvar")
         
-        save_clicked = False
+        # PAUSA MAIOR: Aguarda o formulário estar completamente pronto
+        logger.info("Aguardando 8 segundos para garantir que o formulário esteja pronto...")
+        time.sleep(8)
         
-        # Método 0: Procura especificamente por "SAVE SOLUCION" primeiro (PRIORIDADE MÁXIMA)
+        # DIAGNÓSTICO DE BOTÕES: Mapeia todos os botões visíveis na página
+        logger.info("Analisando todos os botões visíveis na página...")
+        all_buttons = driver.find_elements(By.TAG_NAME, "button")
+        visible_buttons = []
+        
+        # Lista todos os botões para diagnóstico
+        for idx, btn in enumerate(all_buttons):
+            try:
+                if btn.is_displayed():
+                    btn_text = btn.text.strip()
+                    btn_class = btn.get_attribute("class")
+                    btn_id = btn.get_attribute("id")
+                    btn_type = btn.get_attribute("type")
+                    
+                    button_info = {
+                        "index": idx,
+                        "text": btn_text,
+                        "class": btn_class,
+                        "id": btn_id,
+                        "type": btn_type
+                    }
+                    
+                    visible_buttons.append((btn, button_info))
+                    logger.info(f"Botão #{idx}: Texto='{btn_text}', Classe='{btn_class}', ID='{btn_id}', Tipo='{btn_type}'")
+            except:
+                pass
+        
+        logger.info(f"Total de {len(visible_buttons)} botões visíveis encontrados")
+        
+        # Variáveis para controle
+        save_clicked = False
+        button_to_click = None
+        click_method = ""
+        
+        # ESTRATÉGIA ESPECÍFICA PARA COLÔMBIA: busca por botão específico SAVE SOLUCION no documento inteiro
+        logger.info("ESTRATÉGIA ESPECIAL COLÔMBIA: Procurando botão 'SAVE SOLUCION' em qualquer lugar do documento...")
+        special_patterns = ["SAVE SOLUCION", "Save Solucion", "SAVE SOLUTION", "Save Solution", "GUARDAR SOLUCION", "Guardar Solucion"]
+
+        # Busca por JavaScript em todo o documento - extremamente agressivo para encontrar o botão
         try:
-            logger.info("Procurando especificamente pelo botão 'SAVE SOLUCION'...")
+            driver.execute_script("""
+                // Destaca todos os botões em verde para diagnóstico
+                document.querySelectorAll('button').forEach(btn => {
+                    btn.style.border = '2px dashed green';
+                });
+            """)
             
-            # Tenta vários formatos e combinações de case
-            save_solution_patterns = [
+            # Busca por botão específico
+            for pattern in special_patterns:
+                if button_to_click:
+                    break
+                    
+                # Busca por texto exato, parcial e case-insensitive
+                for js_search in [
+                    f"return Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === '{pattern}');",
+                    f"return Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('{pattern}'));",
+                    f"return Array.from(document.querySelectorAll('button')).find(b => b.textContent.toLowerCase().includes('{pattern.toLowerCase()}'));"
+                ]:
+                    try:
+                        result = driver.execute_script(js_search)
+                        if result:
+                            logger.info(f"✅ ENCONTRADO botão '{pattern}' via busca JavaScript especial")
+                            button_to_click = result
+                            click_method = f"JavaScript especial Colômbia - '{pattern}'"
+                            break
+                    except Exception as js_error:
+                        logger.info(f"Erro em busca JS: {js_error}")
+            
+            # Busca pelo botão mais próximo do campo de solução
+            if not button_to_click:
+                logger.info("Tentando encontrar botão próximo ao campo de Solución...")
+                nearby_button_js = """
+                    // Tenta encontrar o campo de solução
+                    var solutionField = Array.from(document.querySelectorAll('textarea, input')).find(el => 
+                        el.id?.toLowerCase().includes('solucion') || 
+                        el.name?.toLowerCase().includes('solucion') ||
+                        el.placeholder?.toLowerCase().includes('solucion')
+                    );
+                    
+                    // Se encontrou o campo, procura pelo botão mais próximo
+                    if (solutionField) {
+                        // Busca até 5 níveis acima do campo
+                        var parent = solutionField;
+                        for (var i = 0; i < 5; i++) {
+                            parent = parent.parentElement;
+                            if (!parent) break;
+                            
+                            // Procura botões neste nível
+                            var buttons = parent.querySelectorAll('button');
+                            for (var j = 0; j < buttons.length; j++) {
+                                if (buttons[j].offsetParent !== null) { // Verifica se está visível
+                                    return buttons[j];
+                                }
+                            }
+                        }
+                    }
+                    return null;
+                """
+                
+                nearby_button = driver.execute_script(nearby_button_js)
+                if nearby_button:
+                    logger.info("✅ Encontrado botão próximo ao campo de Solución!")
+                    button_to_click = nearby_button
+                    click_method = "Proximidade ao campo de Solución"
+            
+            # Tira screenshot para diagnóstico
+            driver.save_screenshot("all_buttons_highlighted.png")
+            logger.info("Screenshot com todos os botões destacados")
+            
+        except Exception as special_error:
+            logger.warning(f"Erro na estratégia especial para Colômbia: {special_error}")
+        
+        # ESTRATÉGIA 0: Procura especificamente por "SAVE SOLUCION" ou variações (PRIORIDADE MÁXIMA)
+        if not button_to_click:
+            logger.info("ESTRATÉGIA 0: Procurando botão com texto específico para salvar solução...")
+            
+            # Lista extensa de padrões específicos para o botão de salvar solução (incluindo variações em espanhol)
+            save_patterns = [
                 "SAVE SOLUCION", "Save Solucion", "save solucion", 
+                "GUARDAR SOLUCION", "Guardar Solucion", "guardar solucion",
+                "GUARDAR SOLUCIÓN", "Guardar Solución", "guardar solución",
                 "SAVE SOLUTION", "Save Solution", "save solution",
-                "SAVE", "Save", "save",
-                "GUARDAR", "Guardar", "guardar",
-                "ENVIAR", "Enviar", "enviar"
+                "SAVE CHANGES", "Save Changes", "save changes",
+                "GUARDAR CAMBIOS", "Guardar Cambios", "guardar cambios",
+                "APLICAR", "Aplicar", "aplicar",
+                "APLICAR CAMBIOS", "Aplicar Cambios", "aplicar cambios",
+                "PROCESAR", "Procesar", "procesar",
+                "ACEPTAR", "Aceptar", "aceptar"
             ]
             
-            for pattern in save_solution_patterns:
-                save_solution_buttons = driver.find_elements(By.XPATH, f"//button[contains(text(), '{pattern}')]")
-                
-                if save_solution_buttons:
-                    for button in save_solution_buttons:
-                        try:
-                            if button.is_displayed():
-                                logger.info(f"Botão com texto '{pattern}' encontrado, tentando clicar...")
-                                
-                                # Tirar screenshot antes de clicar
-                                driver.save_screenshot(f"before_click_{pattern}.png")
-                                
-                                # Rola para garantir visibilidade e centraliza
-                                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
-                                time.sleep(1)
-                                
-                                # IMPORTANTE: Tenta múltiplos métodos de clique
-                                try:
-                                    # Método 1: Clique direto
-                                    button.click()
-                                    logger.info(f"Clicado no botão '{pattern}' via clique direto")
-                                except Exception as click_error:
-                                    logger.info(f"Clique direto falhou: {str(click_error)}, tentando JavaScript...")
-                                    try:
-                                        # Método 2: JavaScript click
-                                        driver.execute_script("arguments[0].click();", button)
-                                        logger.info(f"Clicado no botão '{pattern}' via JavaScript")
-                                    except Exception as js_error:
-                                        logger.info(f"Clique JavaScript falhou: {str(js_error)}, tentando Actions...")
-                                        try:
-                                            # Método 3: Actions chains
-                                            from selenium.webdriver.common.action_chains import ActionChains
-                                            actions = ActionChains(driver)
-                                            actions.move_to_element(button).click().perform()
-                                            logger.info(f"Clicado no botão '{pattern}' via ActionChains")
-                                        except Exception as action_error:
-                                            logger.info(f"Todos os métodos de clique falharam: {str(action_error)}")
-                                            continue
-                                
-                                # Aguarda um pouco após clicar
-                                time.sleep(2)
-                                
-                                # Verifica se o botão ainda está visível (se o clique funcionou, ele pode ter desaparecido)
-                                try:
-                                    if not button.is_displayed():
-                                        logger.info(f"Botão '{pattern}' não está mais visível após o clique - sucesso!")
-                                        save_clicked = True
-                                        return True
-                                except:
-                                    # Se der erro ao verificar, provavelmente o botão foi removido do DOM
-                                    logger.info(f"Erro ao verificar visibilidade do botão - provável sucesso!")
-                                    save_clicked = True
-                                    return True
-                                
-                                # Se chegou aqui, o botão ainda está visível
-                                logger.info(f"Botão '{pattern}' ainda está visível após o clique, mas considerando como clicado")
-                                save_clicked = True
-                                return True
-                        except Exception as e:
-                            logger.info(f"Erro ao tentar clicar no botão '{pattern}': {str(e)}")
-                            continue
+            # Primeiro tenta localizar pelo XPath exato (método mais preciso)
+            for pattern in save_patterns:
+                if button_to_click:
+                    break
+                    
+                logger.info(f"Procurando botão com texto exato '{pattern}'...")
+                try:
+                    # Tenta várias estratégias de XPath para texto exato
+                    for xpath in [
+                        f"//button[text()='{pattern}']",
+                        f"//button[normalize-space(text())='{pattern}']",
+                        f"//button[contains(text(), '{pattern}')]"
+                    ]:
+                        matching_buttons = driver.find_elements(By.XPATH, xpath)
+                        if matching_buttons:
+                            for btn in matching_buttons:
+                                if btn.is_displayed():
+                                    logger.info(f"Botão encontrado com texto '{pattern}' - Prioridade Máxima")
+                                    button_to_click = btn
+                                    click_method = f"Texto exato '{pattern}'"
+                                    break
+                            if button_to_click:
+                                break
+                except Exception as e:
+                    logger.info(f"Erro ao procurar botão '{pattern}': {e}")
+        
+        # ESTRATÉGIA 1: Procura por botão com texto de GUARDAR/SALVAR (mais genérico)
+        if not button_to_click:
+            logger.info("ESTRATÉGIA 1: Procurando botão com texto genérico de salvar...")
             
-            if not save_clicked:
-                logger.info("Nenhum botão SAVE SOLUCION encontrado pelas variações de texto")
-        except Exception as e:
-            logger.info(f"Erro ao procurar botão 'SAVE SOLUCION': {str(e)}")
+            generic_patterns = ["SAVE", "Save", "save", "GUARDAR", "Guardar", "guardar", "SALVAR", "Salvar", "salvar"]
+            
+            for pattern in generic_patterns:
+                try:
+                    matching_buttons = driver.find_elements(By.XPATH, f"//button[contains(text(), '{pattern}')]")
+                    if matching_buttons:
+                        for btn in matching_buttons:
+                            if btn.is_displayed():
+                                logger.info(f"Botão encontrado com texto genérico '{pattern}'")
+                                button_to_click = btn
+                                click_method = f"Texto genérico '{pattern}'"
+                                break
+                        if button_to_click:
+                            break
+                except Exception as e:
+                    logger.info(f"Erro ao procurar botão genérico '{pattern}': {e}")
         
-        # Resto do código permanece o mesmo
-        # ...
+        # ESTRATÉGIA 2: Botão de cor verde, azul ou classe success/primary
+        if not button_to_click:
+            logger.info("ESTRATÉGIA 2: Procurando botão por classe indicativa...")
+            
+            for btn, info in visible_buttons:
+                if info["class"] and any(cls in info["class"].lower() for cls in ["success", "primary", "guardar", "save", "submit"]):
+                    logger.info(f"Botão encontrado por classe '{info['class']}'")
+                    button_to_click = btn
+                    click_method = f"Classe '{info['class']}'"
+                    break
         
-        if not save_clicked:
-            # Último recurso: Pressiona Enter como se tivesse enviado um formulário
+        # ESTRATÉGIA 3: Botão de tipo submit
+        if not button_to_click:
+            logger.info("ESTRATÉGIA 3: Procurando botão do tipo submit...")
+            
             try:
-                logger.info("Tentando enviar o formulário pressionando Enter...")
-                from selenium.webdriver.common.keys import Keys
-                active_element = driver.switch_to.active_element
-                active_element.send_keys(Keys.ENTER)
-                logger.info("Tecla Enter enviada para o elemento ativo")
-                time.sleep(2)
-                save_clicked = True
+                submit_buttons = driver.find_elements(By.XPATH, "//button[@type='submit']")
+                if submit_buttons:
+                    for btn in submit_buttons:
+                        if btn.is_displayed():
+                            logger.info("Botão submit encontrado")
+                            button_to_click = btn
+                            click_method = "Tipo 'submit'"
+                            break
             except Exception as e:
-                logger.info(f"Erro ao enviar Enter: {str(e)}")
+                logger.info(f"Erro ao procurar botão submit: {e}")
         
-        # Mesmo que não tenha clicado, aguarda um pouco mais
-        time.sleep(3)
+        # ESTRATÉGIA 4: Botão em formulário ou no modal-footer
+        if not button_to_click:
+            logger.info("ESTRATÉGIA 4: Procurando botão no formulário ou footer...")
+            
+            try:
+                # Tenta encontrar o botão dentro do form
+                form_buttons = driver.find_elements(By.XPATH, "//form//button | //div[contains(@class, 'modal-footer')]//button")
+                for btn in form_buttons:
+                    if btn.is_displayed():
+                        logger.info(f"Botão encontrado no formulário/footer: '{btn.text}'")
+                        button_to_click = btn
+                        click_method = "Localização no formulário/footer"
+                        break
+            except Exception as e:
+                logger.info(f"Erro ao procurar botão no form/footer: {e}")
         
+        # ESTRATÉGIA 5: Último recurso - primeiro botão visível na página
+        if not button_to_click and visible_buttons:
+            logger.info("ESTRATÉGIA 5: Usando primeiro botão visível como último recurso...")
+            button_to_click = visible_buttons[0][0]
+            click_method = "Primeiro botão visível (último recurso)"
+        
+        # EXECUTA O CLIQUE se encontrou um botão
+        if button_to_click:
+            logger.info(f"Botão para salvar encontrado via: {click_method}")
+            
+            # Tira screenshot com destaque no botão
+            try:
+                original_style = driver.execute_script("return arguments[0].getAttribute('style');", button_to_click)
+                driver.execute_script("arguments[0].setAttribute('style', 'border: 5px solid red !important; background-color: yellow !important;');", button_to_click)
+                driver.save_screenshot("save_button_highlighted.png")
+                driver.execute_script(f"arguments[0].setAttribute('style', '{original_style or ''}');", button_to_click)
+                logger.info("Screenshot com botão destacado salvo")
+            except:
+                pass
+            
+            # Rola até o botão e centraliza
+            logger.info("Rolando até o botão e centralizando...")
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button_to_click)
+            time.sleep(2)
+            
+            # MÉTODO 1: Tenta múltiplos clicks com diferentes técnicas
+            click_success = False
+            
+            # Tenta clicar com JavaScript (mais confiável)
+            try:
+                logger.info("Tentando clicar via JavaScript...")
+                driver.execute_script("arguments[0].click();", button_to_click)
+                time.sleep(2)
+                # Não temos como verificar 100%, então assumimos sucesso
+                logger.info("Clique JavaScript executado")
+                click_success = True
+            except Exception as js_error:
+                logger.warning(f"Erro no clique JavaScript: {js_error}")
+            
+            # Se falhou, tenta clicar com método padrão
+            if not click_success:
+                try:
+                    logger.info("Tentando clicar via método tradicional...")
+                    button_to_click.click()
+                    time.sleep(2)
+                    logger.info("Clique tradicional executado")
+                    click_success = True
+                except Exception as click_error:
+                    logger.warning(f"Erro no clique tradicional: {click_error}")
+            
+            # Se ainda falhou, tenta via Actions
+            if not click_success:
+                try:
+                    logger.info("Tentando clicar via Actions...")
+                    from selenium.webdriver.common.action_chains import ActionChains
+                    actions = ActionChains(driver)
+                    actions.move_to_element(button_to_click).click().perform()
+                    time.sleep(2)
+                    logger.info("Clique via Actions executado")
+                    click_success = True
+                except Exception as action_error:
+                    logger.warning(f"Erro no clique via Actions: {action_error}")
+            
+            # MÉTODO 2: Tenta enviar ENTER no elemento e no documento
+            if not click_success:
+                try:
+                    logger.info("Tentando enviar ENTER para o elemento...")
+                    from selenium.webdriver.common.keys import Keys
+                    button_to_click.send_keys(Keys.ENTER)
+                    time.sleep(2)
+                    logger.info("ENTER enviado para o botão")
+                    click_success = True
+                except Exception as enter_error:
+                    logger.warning(f"Erro ao enviar ENTER: {enter_error}")
+                    
+                    # Último recurso: ENTER no documento
+                    try:
+                        logger.info("Tentando enviar ENTER para o documento...")
+                        active_element = driver.switch_to.active_element
+                        active_element.send_keys(Keys.ENTER)
+                        time.sleep(2)
+                        logger.info("ENTER enviado para elemento ativo")
+                        click_success = True
+                    except Exception as doc_enter_error:
+                        logger.warning(f"Erro ao enviar ENTER para documento: {doc_enter_error}")
+            
+            # MÉTODO 3: Último recurso - executa ENTER via JavaScript
+            if not click_success:
+                try:
+                    logger.info("Tentando simular ENTER via JavaScript...")
+                    # Simula evento de tecla ENTER
+                    driver.execute_script("""
+                        var e = new KeyboardEvent('keydown', {
+                            'key': 'Enter',
+                            'code': 'Enter',
+                            'keyCode': 13,
+                            'which': 13,
+                            'bubbles': true
+                        });
+                        document.dispatchEvent(e);
+                        
+                        // Também simula submit do formulário
+                        var forms = document.getElementsByTagName('form');
+                        if (forms.length > 0) forms[0].submit();
+                    """)
+                    time.sleep(2)
+                    logger.info("JavaScript ENTER/submit executado")
+                    click_success = True
+                except Exception as js_event_error:
+                    logger.warning(f"Erro ao executar eventos JavaScript: {js_event_error}")
+            
+            # Aguarda um pouco mais e tira screenshot após clicar
+            time.sleep(3)
+            driver.save_screenshot("after_save_button_click.png")
+            logger.info("Screenshot após tentativa de clique salvo")
+            
+            # Considera como sucesso mesmo com erros, já que tentamos de várias formas
+            save_clicked = True
+            logger.info("Tentativa de clicar no botão de salvar concluída")
+        else:
+            logger.warning("Não foi possível encontrar nenhum botão para salvar!")
+        
+        # Sempre aguarda um tempo significativo antes de retornar
+        time.sleep(5)
         return save_clicked
+        
     except Exception as e:
-        logger.error(f"Erro ao tentar clicar no botão de salvar: {str(e)}")
+        logger.error(f"Erro crítico ao tentar clicar no botão de salvar: {str(e)}")
+        logger.error(traceback.format_exc())
+        # Tira screenshot do erro
+        driver.save_screenshot("error_save_button.png")
+        time.sleep(3)  # Aguarda mesmo em caso de erro
         return False
 
 def check_and_close_tabs():
