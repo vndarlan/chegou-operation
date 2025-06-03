@@ -49,12 +49,12 @@ WORKDIR /app
 # Copia arquivos de requisitos
 COPY requirements.txt .
 
-# Instala todas as dependências Python de uma vez com versões fixas
+# Instala todas as dependências Python de uma vez com versões atualizadas
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
     numpy==1.24.4 \
     pandas==2.0.3 \
-    streamlit==1.35.0 \
+    streamlit==1.39.0 \
     selenium==4.17.2 \
     webdriver-manager==4.0.1 \
     apscheduler==3.10.4 \
