@@ -1207,10 +1207,171 @@ def click_no_yes_buttons(driver):
         logger.error(f"Erro ao tentar excluir formulário: {str(e)}")
         return False
 
+def handle_simple_three_field_form(driver, form_modal, customer_info):
+    """Função especializada para lidar com o novo formulário simples de 3 campos."""
+    try:
+        logger.info("Detectado formulário simples de 3 campos - usando tratamento específico...")
+        
+        # Tirar screenshot antes de qualquer interação
+        try:
+            driver.save_screenshot("before_simple_form_interaction.png")
+            logger.info("Screenshot antes da interação com formulário simples")
+        except:
+            pass
+        
+        fields_filled = 0
+        
+        # CAMPO 1: Preenche "Solución" com o endereço
+        logger.info("Preenchendo campo 'Solución'...")
+        try:
+            solucion_filled = fill_field_by_label(driver, form_modal, 
+                                                ["Solución", "Solucion"], 
+                                                customer_info["address"])
+            if solucion_filled:
+                fields_filled += 1
+                logger.info("✅ Campo 'Solución' preenchido com sucesso")
+            else:
+                logger.warning("❌ Não foi possível preencher o campo 'Solución'")
+        except Exception as e:
+            logger.error(f"Erro ao preencher campo 'Solución': {str(e)}")
+        
+        # CAMPO 2: Preenche "Confirmar dirección destinatario" com o endereço
+        logger.info("Preenchendo campo 'Confirmar dirección destinatario'...")
+        try:
+            direccion_filled = fill_field_by_label(driver, form_modal, 
+                                                 ["Confirmar dirección destinatario", "Confirmar direccion destinatario"], 
+                                                 customer_info["address"])
+            if direccion_filled:
+                fields_filled += 1
+                logger.info("✅ Campo 'Confirmar dirección destinatario' preenchido com sucesso")
+            else:
+                logger.warning("❌ Não foi possível preencher o campo 'Confirmar dirección destinatario'")
+        except Exception as e:
+            logger.error(f"Erro ao preencher campo 'Confirmar dirección destinatario': {str(e)}")
+        
+        # CAMPO 3: Preenche "Confirmar celular destinatario" com o telefone
+        logger.info("Preenchendo campo 'Confirmar celular destinatario'...")
+        try:
+            celular_filled = fill_field_by_label(driver, form_modal, 
+                                                ["Confirmar celular destinatario", "Confirmar celular destinatario"], 
+                                                customer_info["phone"])
+            if celular_filled:
+                fields_filled += 1
+                logger.info("✅ Campo 'Confirmar celular destinatario' preenchido com sucesso")
+            else:
+                logger.warning("❌ Não foi possível preencher o campo 'Confirmar celular destinatario'")
+        except Exception as e:
+            logger.error(f"Erro ao preencher campo 'Confirmar celular destinatario': {str(e)}")
+        
+        # Tirar screenshot após preencher os campos
+        try:
+            driver.save_screenshot("after_simple_form_filled.png")
+            logger.info("Screenshot após preencher formulário simples")
+        except:
+            pass
+        
+        # Tenta clicar no botão "SAVE SOLUTION"
+        logger.info("Tentando clicar no botão 'SAVE SOLUTION'...")
+        try:
+            save_clicked = False
+            
+            # Busca pelo botão específico "SAVE SOLUTION"
+            save_patterns = ["SAVE SOLUTION", "Save Solution", "save solution"]
+            
+            for pattern in save_patterns:
+                try:
+                    save_buttons = driver.find_elements(By.XPATH, f"//button[contains(text(), '{pattern}')]")
+                    for button in save_buttons:
+                        if button.is_displayed():
+                            # Rola até o botão
+                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+                            time.sleep(1)
+                            
+                            # Clica via JavaScript
+                            driver.execute_script("arguments[0].click();", button)
+                            logger.info(f"✅ Clicado no botão '{pattern}' via JavaScript")
+                            save_clicked = True
+                            break
+                    if save_clicked:
+                        break
+                except Exception as e:
+                    logger.info(f"Erro ao clicar no botão '{pattern}': {e}")
+            
+            # Se não encontrou pelo texto, tenta por classe
+            if not save_clicked:
+                try:
+                    save_buttons = driver.find_elements(By.XPATH, "//button[contains(@class, 'btn-success') or contains(@class, 'btn-primary')]")
+                    for button in save_buttons:
+                        if button.is_displayed():
+                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+                            time.sleep(1)
+                            driver.execute_script("arguments[0].click();", button)
+                            logger.info("✅ Clicado no botão 'SAVE' por classe")
+                            save_clicked = True
+                            break
+                except Exception as e:
+                    logger.info(f"Erro ao clicar no botão por classe: {e}")
+            
+            if not save_clicked:
+                logger.warning("⚠️ Não foi possível clicar no botão 'SAVE SOLUTION'")
+                
+        except Exception as e:
+            logger.error(f"Erro ao tentar clicar no botão SAVE SOLUTION: {str(e)}")
+        
+        logger.info(f"Total de {fields_filled} campos preenchidos no formulário simples")
+        
+        # Aguarda processamento
+        time.sleep(3)
+        
+        return fields_filled > 0
+            
+    except Exception as e:
+        logger.error(f"Erro ao processar formulário simples de 3 campos: {str(e)}")
+        logger.error(traceback.format_exc())
+        return False
+
 def fill_form_fields(driver, form_modal, customer_info):
     """Preenche os campos do formulário com as informações do cliente."""
     try:
-        logger.info("Verificando se o formulário tem o formato de dropdown...")
+        logger.info("Analisando tipo de formulário...")
+        
+        # NOVA VERIFICAÇÃO: Detecta formulário simples de 3 campos
+        simple_form_exists = False
+        try:
+            # Verifica se tem os 3 campos específicos do novo formato
+            simple_field_indicators = [
+                "Solución",
+                "Confirmar dirección destinatario", 
+                "Confirmar celular destinatario"
+            ]
+            
+            fields_found = 0
+            for field_name in simple_field_indicators:
+                # Busca por labels ou placeholders com esses textos
+                elements = driver.find_elements(By.XPATH, f"//*[contains(text(), '{field_name}') or contains(@placeholder, '{field_name}')]")
+                if elements:
+                    fields_found += 1
+                    logger.info(f"Campo encontrado: {field_name}")
+            
+            # Se encontrou pelo menos 2 dos 3 campos específicos, é o formato simples
+            if fields_found >= 2:
+                simple_form_exists = True
+                logger.info("Detectado formulário simples de 3 campos")
+                
+            # Verifica também pela presença do botão "SAVE SOLUTION"
+            if not simple_form_exists:
+                save_solution_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'SAVE SOLUTION')]")
+                if save_solution_buttons:
+                    simple_form_exists = True
+                    logger.info("Detectado formulário simples pela presença do botão 'SAVE SOLUTION'")
+                    
+        except Exception as e:
+            logger.info(f"Erro ao verificar formulário simples: {str(e)}")
+        
+        # Se detectou o formulário simples, usa a função especializada
+        if simple_form_exists:
+            logger.info("Usando tratamento para formulário simples de 3 campos")
+            return handle_simple_three_field_form(driver, form_modal, customer_info)
         
         # Verifica se existe um select de Solución (detecção mais precisa)
         dropdown_exists = False
@@ -1256,6 +1417,10 @@ def fill_form_fields(driver, form_modal, customer_info):
         if dropdown_exists:
             logger.info("Detectado formulário com dropdown de Solución. Usando tratamento especializado.")
             return handle_dropdown_solution_form(driver, form_modal, customer_info)
+        
+        # Caso contrário, continua com o fluxo normal
+        logger.info("Usando fluxo normal de preenchimento de formulário...")
+        fields_filled = 0
         
         # Caso contrário, continua com o fluxo normal
         logger.info("Usando fluxo normal de preenchimento de formulário...")
@@ -2460,7 +2625,10 @@ def click_save_button(driver):
         
         # ESTRATÉGIA ESPECÍFICA PARA COLÔMBIA: busca por botão específico SAVE SOLUCION no documento inteiro
         logger.info("ESTRATÉGIA ESPECIAL COLÔMBIA: Procurando botão 'SAVE SOLUCION' em qualquer lugar do documento...")
-        special_patterns = ["SAVE SOLUCION", "Save Solucion", "SAVE SOLUTION", "Save Solution", "GUARDAR SOLUCION", "Guardar Solucion"]
+        special_patterns = [
+            "SAVE SOLUCION", "Save Solucion", "SAVE SOLUTION", "Save Solution", 
+            "GUARDAR SOLUCION", "Guardar Solucion", "GUARDAR SOLUCIÓN", "Guardar Solución"
+        ]
 
         # Busca por JavaScript em todo o documento - extremamente agressivo para encontrar o botão
         try:
@@ -2543,9 +2711,9 @@ def click_save_button(driver):
             # Lista extensa de padrões específicos para o botão de salvar solução (incluindo variações em espanhol)
             save_patterns = [
                 "SAVE SOLUCION", "Save Solucion", "save solucion", 
+                "SAVE SOLUTION", "Save Solution", "save solution",
                 "GUARDAR SOLUCION", "Guardar Solucion", "guardar solucion",
                 "GUARDAR SOLUCIÓN", "Guardar Solución", "guardar solución",
-                "SAVE SOLUTION", "Save Solution", "save solution",
                 "SAVE CHANGES", "Save Changes", "save changes",
                 "GUARDAR CAMBIOS", "Guardar Cambios", "guardar cambios",
                 "APLICAR", "Aplicar", "aplicar",
