@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV SELENIUM_TIMEOUT=60
 
-# Instala dependências do sistema
+# Instala dependências do sistema e Chrome em uma única layer
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
@@ -36,10 +36,7 @@ RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
     libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Instala Chrome usando apt
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
     && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list' \
     && apt-get update \
     && apt-get install -y google-chrome-stable \
@@ -49,16 +46,23 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key
 # Configura diretório de trabalho
 WORKDIR /app
 
-# Copia arquivos de requisitos primeiro (para aproveitar o cache de camadas)
+# Copia arquivos de requisitos
 COPY requirements.txt .
 
-# CORREÇÃO: Instala NumPy e Pandas com versões compatíveis primeiro
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir numpy>=1.24.0,<2.0.0 \
-    && pip install --no-cache-dir pandas>=2.0.0,<3.0.0
-
-# Instala o resto das dependências Python
-RUN pip install --no-cache-dir -r requirements.txt
+# Instala todas as dependências Python de uma vez com versões fixas
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    numpy==1.24.4 \
+    pandas==2.0.3 \
+    streamlit==1.35.0 \
+    selenium==4.17.2 \
+    webdriver-manager==4.0.1 \
+    apscheduler==3.10.4 \
+    psycopg2-binary \
+    beautifulsoup4==4.12.2 \
+    plotly==5.15.0 \
+    python-dotenv==1.0.1 \
+    sqlalchemy==2.0.27
 
 # Copia o restante dos arquivos
 COPY . .
@@ -72,5 +76,5 @@ RUN mkdir -p /app/logs /app/screenshots \
 # Expõe a porta que será usada
 EXPOSE 8080
 
-# Comando para executar a aplicação com expansão da variável PORT
+# Comando para executar a aplicação
 CMD streamlit run iniciar.py --server.address=0.0.0.0 --server.port=${PORT:-8080}
