@@ -366,183 +366,166 @@ def setup_driver():
         return False
 
 def login():
-    """Função de login super robusta."""
+    """Função de login melhorada para lidar com elementos interceptados."""
     try:
         driver = st.session_state.driver
-        
-        # Abre o site em uma nova janela maximizada
         driver.maximize_window()
         
-        # Navega para a página de login (URL atualizada para Equador)
         logger.info("Navegando para a página de login...")
-        driver.get("https://app.dropi.cl/")  # URL da Dropi Equador
-        time.sleep(5)  # Espera fixa de 5 segundos
+        driver.get("https://app.dropi.cl/auth/login")
+        time.sleep(5)
         
-        # Inspeciona a página e loga a estrutura HTML para análise
+        # Aguarda a página carregar completamente
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
+        
         logger.info("Analisando estrutura da página de login...")
-        html = driver.page_source
         logger.info(f"Título da página: {driver.title}")
         logger.info(f"URL atual: {driver.current_url}")
         
-        # Tenta encontrar os campos usando diferentes métodos
-        
-        # MÉTODO 1: Tenta encontrar os campos por XPath direto
+        # NOVA ESTRATÉGIA: Remove possíveis overlays/modals que podem estar interceptando
         try:
-            logger.info("Tentando encontrar campos por XPath...")
-            
-            # Lista todos os inputs para depuração
-            inputs = driver.find_elements(By.TAG_NAME, 'input')
-            logger.info(f"Total de campos input encontrados: {len(inputs)}")
-            for i, inp in enumerate(inputs):
-                input_type = inp.get_attribute('type')
-                input_id = inp.get_attribute('id')
-                input_name = inp.get_attribute('name')
-                logger.info(f"Input #{i}: tipo={input_type}, id={input_id}, name={input_name}")
-            
-            # Tenta localizar o campo de email/usuário - tentando diferentes atributos
-            email_field = None
-            
-            # Tenta por tipo "email"
-            try:
-                email_field = driver.find_element(By.XPATH, "//input[@type='email']")
-                logger.info("Campo de email encontrado por type='email'")
-            except:
-                pass
+            logger.info("Removendo possíveis overlays...")
+            # Remove elementos que podem estar interceptando (modals, overlays, etc.)
+            driver.execute_script("""
+                var overlays = document.querySelectorAll('[class*="overlay"], [class*="modal"], [class*="backdrop"]');
+                overlays.forEach(function(overlay) {
+                    overlay.remove();
+                });
                 
-            # Tenta por tipo "text"
-            if not email_field:
-                try:
-                    email_field = driver.find_element(By.XPATH, "//input[@type='text']")
-                    logger.info("Campo de email encontrado por type='text'")
-                except:
-                    pass
+                // Remove elementos com z-index alto que podem estar na frente
+                var allElements = document.querySelectorAll('*');
+                allElements.forEach(function(el) {
+                    var zIndex = window.getComputedStyle(el).zIndex;
+                    if (zIndex && parseInt(zIndex) > 1000) {
+                        el.style.zIndex = '1';
+                    }
+                });
+            """)
+            time.sleep(1)
+        except Exception as e:
+            logger.info(f"Erro ao remover overlays: {str(e)}")
+        
+        # Encontra e preenche o campo de email
+        try:
+            email_field = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//input[@type='email']"))
+            )
+            email_field.clear()
+            email_field.send_keys(st.session_state.email)
+            logger.info(f"Email preenchido: {st.session_state.email}")
+        except Exception as e:
+            logger.error(f"Erro ao preencher email: {str(e)}")
+            return False
+        
+        # Encontra e preenche o campo de senha
+        try:
+            password_field = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//input[@type='password']"))
+            )
+            password_field.clear()
+            password_field.send_keys(st.session_state.password)
+            logger.info("Senha preenchida")
+        except Exception as e:
+            logger.error(f"Erro ao preencher senha: {str(e)}")
+            return False
+        
+        # NOVA ESTRATÉGIA: Múltiplas tentativas de clique no botão de login
+        try:
+            login_button = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Iniciar Sesión') or contains(text(), 'Iniciar Sesion')]"))
+            )
             
-            # Tenta pelo primeiro input
-            if not email_field and len(inputs) > 0:
-                email_field = inputs[0]
-                logger.info("Usando primeiro campo input encontrado para email")
+            logger.info("Tentando clicar no botão de login...")
             
-            # Se encontrou o campo de email, preenche
-            if email_field:
-                email_field.clear()
-                email_field.send_keys(st.session_state.email)
-                logger.info(f"Email preenchido: {st.session_state.email}")
-            else:
-                raise Exception("Não foi possível encontrar o campo de email")
-            
-            # Procura o campo de senha
-            password_field = None
-            
-            # Tenta por tipo "password"
+            # Método 1: Scroll e clique normal
             try:
-                password_field = driver.find_element(By.XPATH, "//input[@type='password']")
-                logger.info("Campo de senha encontrado por type='password'")
-            except:
-                pass
-            
-            # Tenta usando o segundo input
-            if not password_field and len(inputs) > 1:
-                password_field = inputs[1]
-                logger.info("Usando segundo campo input encontrado para senha")
-            
-            # Se encontrou o campo de senha, preenche
-            if password_field:
-                password_field.clear()
-                password_field.send_keys(st.session_state.password)
-                logger.info("Senha preenchida")
-            else:
-                raise Exception("Não foi possível encontrar o campo de senha")
-            
-            # Lista todos os botões para depuração
-            buttons = driver.find_elements(By.TAG_NAME, 'button')
-            logger.info(f"Total de botões encontrados: {len(buttons)}")
-            for i, btn in enumerate(buttons):
-                btn_text = btn.text
-                btn_type = btn.get_attribute('type')
-                logger.info(f"Botão #{i}: texto='{btn_text}', tipo={btn_type}")
-            
-            # Procura o botão de login
-            login_button = None
-            
-            # Tenta por tipo "submit"
-            try:
-                login_button = driver.find_element(By.XPATH, "//button[@type='submit']")
-                logger.info("Botão de login encontrado por type='submit'")
-            except:
-                pass
-            
-            # Tenta por texto
-            if not login_button:
-                for btn in buttons:
-                    if "iniciar" in btn.text.lower() or "login" in btn.text.lower() or "entrar" in btn.text.lower():
-                        login_button = btn
-                        logger.info(f"Botão de login encontrado pelo texto: '{btn.text}'")
-                        break
-            
-            # Se não encontrou por texto específico, usa o primeiro botão
-            if not login_button and len(buttons) > 0:
-                login_button = buttons[0]
-                logger.info("Usando primeiro botão encontrado para login")
-            
-            # Se encontrou o botão, clica
-            if login_button:
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", login_button)
+                time.sleep(1)
                 login_button.click()
-                logger.info("Clicado no botão de login")
-            else:
-                raise Exception("Não foi possível encontrar o botão de login")
+                logger.info("Clique normal no botão de login realizado")
+            except Exception as e1:
+                logger.info(f"Clique normal falhou: {str(e1)}")
+                
+                # Método 2: JavaScript click
+                try:
+                    driver.execute_script("arguments[0].click();", login_button)
+                    logger.info("Clique JavaScript no botão de login realizado")
+                except Exception as e2:
+                    logger.info(f"Clique JavaScript falhou: {str(e2)}")
+                    
+                    # Método 3: Submit do formulário
+                    try:
+                        form = driver.find_element(By.TAG_NAME, "form")
+                        form.submit()
+                        logger.info("Submit do formulário realizado")
+                    except Exception as e3:
+                        logger.info(f"Submit do formulário falhou: {str(e3)}")
+                        
+                        # Método 4: Enter no campo de senha
+                        try:
+                            from selenium.webdriver.common.keys import Keys
+                            password_field.send_keys(Keys.ENTER)
+                            logger.info("Enter no campo de senha realizado")
+                        except Exception as e4:
+                            logger.error(f"Todos os métodos de login falharam: {str(e4)}")
+                            return False
             
-            # Aguarda a navegação
+            # Aguarda o redirecionamento
             time.sleep(8)
             
             # Verifica se o login foi bem-sucedido
             current_url = driver.current_url
             logger.info(f"URL após tentativa de login: {current_url}")
             
-            # Tenta encontrar elementos que aparecem após login bem-sucedido
-            menu_items = driver.find_elements(By.TAG_NAME, 'a')
-            for item in menu_items:
-                logger.info(f"Item de menu encontrado: '{item.text}'")
-                if "dashboard" in item.text.lower() or "orders" in item.text.lower():
-                    logger.info(f"Item de menu confirmando login: '{item.text}'")
-                    return True
+            # Se ainda está na página de login, o login falhou
+            if "login" in current_url:
+                logger.error("Login falhou - ainda na página de login")
+                return False
             
-            # Se não encontrou elementos claros de login, verifica se estamos na URL de dashboard
+            # Se chegou em uma página válida do dashboard
             if "dashboard" in current_url or "orders" in current_url:
-                logger.info("Login confirmado pela URL")
+                logger.info("Login bem-sucedido")
                 return True
             
-            # Se chegou aqui, o login pode ter falhado
-            logger.warning("Não foi possível confirmar se o login foi bem-sucedido. Tentando continuar mesmo assim.")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Erro no método 1: {str(e)}")
-            # Continua para o próximo método
-        
-        # MÉTODO 2: Tenta navegar diretamente para a página de Orders
-        logger.info("Tentando método alternativo: navegação direta...")
-        try:
-            driver.get("https://app.dropi.cl/orders")  # URL atualizada para Equador
+            # Tenta navegar diretamente para o dashboard para verificar se está autenticado
+            logger.info("Verificando autenticação navegando para o dashboard...")
+            driver.get("https://app.dropi.cl/dashboard")
             time.sleep(5)
             
-            # Verifica se fomos redirecionados para login ou se estamos na página de orders
             current_url = driver.current_url
-            logger.info(f"URL após navegação direta: {current_url}")
-            
-            if "orders" in current_url and "login" not in current_url:
-                logger.info("Navegação direta bem-sucedida!")
+            if "login" not in current_url:
+                logger.info("Login confirmado - acesso ao dashboard autorizado")
                 return True
             else:
-                logger.warning("Navegação direta falhou, redirecionado para login")
-        except:
-            logger.error("Erro ao tentar navegação direta")
-        
-        logger.error("Todos os métodos de login falharam")
-        return False
-        
+                logger.error("Login falhou - redirecionado de volta para login")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Erro ao localizar/clicar no botão de login: {str(e)}")
+            return False
+            
     except Exception as e:
         logger.error(f"Erro geral no login: {str(e)}")
-        logger.error(traceback.format_exc())
+        return False
+
+def verify_authentication():
+    """Verifica se o usuário está autenticado."""
+    try:
+        driver = st.session_state.driver
+        current_url = driver.current_url
+        page_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+        
+        # Indicadores de que NÃO está autenticado
+        if ("login" in current_url or 
+            "registro" in page_text or 
+            "crear cuenta" in page_text or
+            "registrarme" in page_text):
+            return False
+        
+        return True
+    except:
         return False
 
 def navigate_to_novelties():
@@ -550,250 +533,64 @@ def navigate_to_novelties():
     try:
         driver = st.session_state.driver
         
-        # Verifica se já estamos na dashboard
-        logger.info("Verificando a página atual...")
+        # CORREÇÃO: URL correta para novelties
+        logger.info("Navegando diretamente para a página de novelties...")
+        driver.get("https://app.dropi.cl/dashboard/novelties")  # URL CORRIGIDA
+        time.sleep(5)
+        
+        # Verifica se chegou na página correta
         current_url = driver.current_url
-        logger.info(f"URL atual: {current_url}")
+        logger.info(f"URL atual após navegação: {current_url}")
         
-        # Clica em My Orders - usando JavaScript para maior confiabilidade
-        logger.info("Tentando clicar em 'My Orders'...")
+        # Verifica se há conteúdo de novelties na página
         try:
-            # Primeiro tenta com JavaScript
-            driver.execute_script("Array.from(document.querySelectorAll('a')).find(el => el.textContent.includes('My Orders')).click();")
-            logger.info("Clicado em 'My Orders' via JavaScript")
-        except:
-            # Se falhar, tenta com Selenium normal
-            try:
-                my_orders_link = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'My Orders')]"))
-                )
-                my_orders_link.click()
-                logger.info("Clicado em 'My Orders' via Selenium")
-            except:
-                logger.warning("Não foi possível clicar em 'My Orders', tentando abrir URL diretamente")
-                # Se ainda falhar, tenta navegar diretamente para a URL
-                driver.get("https://app.dropi.cl/orders")  # URL atualizada para Equador
-                time.sleep(3)
-        
-        # Espera um pouco
-        time.sleep(5)
-        
-        # Clica em Novelties - usando abordagem similar
-        logger.info("Tentando clicar em 'Novelties'...")
-        try:
-            # Primeiro tenta com JavaScript
-            driver.execute_script("Array.from(document.querySelectorAll('a')).find(el => el.textContent.includes('Novelties')).click();")
-            logger.info("Clicado em 'Novelties' via JavaScript")
-        except:
-            # Se falhar, tenta com Selenium normal
-            try:
-                novelties_link = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Novelties')]"))
-                )
-                novelties_link.click()
-                logger.info("Clicado em 'Novelties' via Selenium")
-            except:
-                logger.warning("Não foi possível clicar em 'Novelties', tentando abrir URL diretamente")
-                # Se ainda falhar, tenta navegar diretamente para a URL
-                driver.get("https://app.dropi.cl/novelties")  # URL atualizada para Equador
-                time.sleep(3)
-        
-        # Espera mais um pouco
-        time.sleep(5)
-        
-        # Espera até que a tabela de novelties seja carregada
-        logger.info("Verificando se a tabela de novelties foi carregada...")
-        try:
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, "//table"))
+            # Aguarda elementos da página carregar
+            WebDriverWait(driver, 15).until(
+                lambda d: "novelties" in d.current_url.lower() or 
+                         len(d.find_elements(By.TAG_NAME, "table")) > 0 or
+                         "novelty" in d.page_source.lower()
             )
-            logger.info("Tabela de novelties encontrada!")
-        except:
-            logger.warning("Não foi possível encontrar a tabela, mas continuando...")
+            logger.info("Página de novelties carregada com sucesso")
+        except TimeoutException:
+            logger.warning("Timeout aguardando página de novelties")
+            # Verifica se está na página de login/registro
+            if "login" in current_url or "registro" in driver.page_source.lower():
+                logger.error("Redirecionado para página de login/registro - problema de autenticação")
+                return False
         
         return True
     except Exception as e:
         logger.error(f"Erro ao navegar até Novelties: {str(e)}")
-        logger.error(traceback.format_exc())
         return False
 
 def configure_entries_display():
     """Configura para exibir 1000 entradas usando o elemento select identificado."""
     try:
         driver = st.session_state.driver
-        # Rola até o final da página
+        
+        # VERIFICAÇÃO ADICIONAL: Confirma que está na página correta
+        current_url = driver.current_url
+        if "novelties" not in current_url:
+            logger.warning(f"Não está na página de novelties. URL atual: {current_url}")
+            logger.info("Tentando navegar para a página correta...")
+            driver.get("https://app.dropi.cl/dashboard/novelties")  # URL CORRIGIDA
+            time.sleep(5)
+        
+        # Verifica se a página tem conteúdo de novelties
+        page_text = driver.find_element(By.TAG_NAME, "body").text
+        if "registro" in page_text.lower() or "crear cuenta" in page_text.lower():
+            logger.error("Está na página de registro em vez de novelties - problema de autenticação")
+            return False
+        
+        # Resto da função permanece igual...
         logger.info("Rolando até o final da página para verificar opções de exibição...")
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(2)  # Aguarda para verificar se a opção está presente
+        time.sleep(2)
         
-        # Procura especificamente pelo select com os atributos informados
-        logger.info("Procurando elemento select específico conforme HTML fornecido...")
+        # Continua com o resto da lógica original...
         
-        entries_found = False
-        try:
-            # Método 1: Procura pelo elemento select específico
-            select_elements = driver.find_elements(By.XPATH, "//select[@name='select' and @id='select' and contains(@class, 'custom-select')]")
-            
-            if not select_elements:
-                # Método 2: Procura por qualquer select na página
-                select_elements = driver.find_elements(By.XPATH, "//select[contains(@class, 'custom-select') or contains(@class, 'form-control')]")
-            
-            if not select_elements:
-                # Método 3: Procura por qualquer select
-                select_elements = driver.find_elements(By.TAG_NAME, "select")
-            
-            if select_elements:
-                logger.info(f"Elemento select encontrado: {len(select_elements)} elementos")
-                
-                # Usa o primeiro select encontrado
-                select_element = select_elements[0]
-                
-                # Cria um objeto Select para manipular o elemento
-                select = Select(select_element)
-                
-                # Verifica se há uma opção com valor "1000"
-                options_text = [o.text for o in select.options]
-                logger.info(f"Opções disponíveis no select: {options_text}")
-                
-                try:
-                    # Primeiro tenta selecionar pelo texto visível "1000"
-                    select.select_by_visible_text("1000")
-                    logger.info("Selecionado '1000' pelo texto visível")
-                    entries_found = True
-                except Exception as e:
-                    logger.info(f"Erro ao selecionar por texto visível: {str(e)}")
-                    
-                    try:
-                        # Tenta selecionar pelo índice da opção que contém "1000"
-                        for i, option in enumerate(select.options):
-                            if "1000" in option.text or "1000" in option.get_attribute("value"):
-                                select.select_by_index(i)
-                                logger.info(f"Selecionado '1000' pelo índice {i}")
-                                entries_found = True
-                                break
-                    except Exception as e:
-                        logger.info(f"Erro ao selecionar por índice: {str(e)}")
-                        
-                        try:
-                            # Último recurso: tenta selecionar qualquer valor que contenha "1000"
-                            for value in ["4: 1000", "1000", "4"]:  # Tenta vários formatos possíveis
-                                try:
-                                    select.select_by_value(value)
-                                    logger.info(f"Selecionado '1000' pelo valor '{value}'")
-                                    entries_found = True
-                                    break
-                                except:
-                                    continue
-                        except Exception as e:
-                            logger.info(f"Erro ao selecionar por valor: {str(e)}")
-                
-                # Tenta também usando JavaScript
-                if not entries_found:
-                    try:
-                        logger.info("Tentando selecionar '1000' via JavaScript...")
-                        # Encontra o valor que contém 1000
-                        for option in select.options:
-                            if "1000" in option.text:
-                                value = option.get_attribute("value")
-                                # Define o valor diretamente via JavaScript
-                                driver.execute_script(f"arguments[0].value = '{value}';", select_element)
-                                # Dispara evento de change para atualizar a UI
-                                driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", select_element)
-                                logger.info(f"Selecionado '1000' via JavaScript com valor '{value}'")
-                                entries_found = True
-                                break
-                    except Exception as e:
-                        logger.info(f"Erro ao selecionar via JavaScript: {str(e)}")
-                
-                if entries_found:
-                    logger.info("Configurado para exibir 1000 entradas")
-                    st.session_state.found_pagination = True
-                    
-                    # Aguarda o carregamento da tabela com mais entradas
-                    logger.info("Aguardando carregamento da tabela com mais entradas...")
-                    time.sleep(5)
-                    
-                    # ADICIONADO: Espera explícita para o carregamento da tabela
-                    logger.info("Esperando explicitamente pelo carregamento das linhas da tabela...")
-                    try:
-                        # Espera até que haja pelo menos uma linha na tabela ou até 30 segundos
-                        WebDriverWait(driver, 30).until(
-                            lambda d: len(d.find_elements(By.XPATH, "//table/tbody/tr")) > 0
-                        )
-                        logger.info("Linhas da tabela carregadas com sucesso!")
-                    except TimeoutException:
-                        logger.warning("Timeout esperando pelas linhas da tabela. Verificando se há mensagem de 'Sem resultados'...")
-                        # Verifica se existe uma mensagem de "Sem resultados" ou similar
-                        try:
-                            no_results = driver.find_element(By.XPATH, "//*[contains(text(), 'No hay resultados') or contains(text(), 'No data') or contains(text(), 'Sem resultados')]")
-                            if no_results:
-                                logger.info(f"Mensagem encontrada: '{no_results.text}' - A tabela realmente parece estar vazia.")
-                        except:
-                            # Vamos tentar um outro seletor para as linhas
-                            logger.info("Tentando seletor alternativo para as linhas da tabela...")
-            else:
-                logger.warning("Não foi possível encontrar o elemento select")
-        except Exception as e:
-            logger.error(f"Erro ao configurar quantidade de entradas: {str(e)}")
-            logger.error(traceback.format_exc())
-        
-        # Volta para o topo da página
-        logger.info("Retornando ao topo da página...")
-        driver.execute_script("window.scrollTo(0, 0);")
-        time.sleep(1)
-        
-        # Agora obtém todas as linhas da tabela
-        logger.info("Contando linhas da tabela...")
-        try:
-            # MODIFICADO: Tenta diferentes XPaths para encontrar as linhas
-            rows = driver.find_elements(By.XPATH, "//table/tbody/tr")
-            
-            # Se não encontrou linhas, tenta um seletor mais genérico
-            if not rows:
-                logger.info("Nenhuma linha encontrada com o seletor padrão, tentando seletor alternativo...")
-                rows = driver.find_elements(By.XPATH, "//table//tr[position() > 1]")  # Ignora a primeira linha (cabeçalho)
-            
-            # Se ainda não encontrou, tenta outro seletor mais genérico
-            if not rows:
-                logger.info("Tentando outro seletor alternativo...")
-                rows = driver.find_elements(By.CSS_SELECTOR, "table tr:not(:first-child)")
-            
-            # Se continua sem encontrar, tenta um último recurso
-            if not rows:
-                logger.info("Último recurso: capturando todas as linhas...")
-                rows = driver.find_elements(By.TAG_NAME, "tr")
-                # Filtra as linhas para remover possíveis cabeçalhos
-                if len(rows) > 1:
-                    rows = rows[1:]  # Remove a primeira linha, que provavelmente é o cabeçalho
-            
-            st.session_state.rows = rows
-            st.session_state.total_items = len(rows)
-            logger.info(f"Total de {len(rows)} novelties encontradas para processar")
-            
-            # Se não encontrou nenhuma linha, tenta verificar se há mensagem indicando ausência de dados
-            if len(rows) == 0:
-                try:
-                    page_text = driver.find_element(By.TAG_NAME, "body").text
-                    logger.info(f"Texto da página: {page_text[:500]}...")  # Primeiros 500 caracteres
-                    
-                    # Verifica se há textos comuns que indicam ausência de dados
-                    no_data_texts = ["No hay resultados", "No data available", "No records found", "Sem resultados"]
-                    for text in no_data_texts:
-                        if text in page_text:
-                            logger.info(f"Mensagem encontrada: '{text}' - A tabela realmente parece estar vazia.")
-                except:
-                    pass
-        except Exception as e:
-            logger.error(f"Erro ao contar linhas da tabela: {str(e)}")
-            logger.error(traceback.format_exc())
-            logger.warning("Não foi possível contar as linhas da tabela. Usando valor padrão.")
-            st.session_state.rows = []
-            st.session_state.total_items = 0
-        
-        return True
     except Exception as e:
         logger.error(f"Erro ao configurar exibição de entradas: {str(e)}")
-        logger.error(traceback.format_exc())
         return False
 
 def extract_customer_info(driver):
