@@ -25,6 +25,25 @@ try:
 except ImportError:
     def is_railway():
         return "RAILWAY_ENVIRONMENT" in os.environ
+
+# CORREÇÃO PARA PROBLEMAS DE STREAMLIT
+try:
+    if hasattr(st, 'cache_data'):
+        st.cache_data.clear()
+    if hasattr(st, 'cache_resource'):
+        st.cache_resource.clear()
+except:
+    pass
+
+try:
+    st.set_page_config(
+        page_title="Dropi Automação Chile",
+        page_icon="🇨🇱",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+except:
+    pass
     
 THIS_COUNTRY = "chile" # Mude para "chile", "colombia", 
 
@@ -321,7 +340,7 @@ if st.session_state.report and not st.session_state.is_running:
 
 # Rodapé
 st.markdown("---")
-st.caption("Automação Dropi Novelties Equador © 2025")
+st.caption("Automação Dropi Novelties Chile © 2025")
 
 # Funções de automação (adaptadas para serem executadas passo a passo)
 def setup_driver():
@@ -366,7 +385,7 @@ def setup_driver():
         return False
 
 def login():
-    """Função de login melhorada para lidar com elementos interceptados."""
+    """Função de login melhorada."""
     try:
         driver = st.session_state.driver
         driver.maximize_window()
@@ -380,21 +399,19 @@ def login():
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
         
-        logger.info("Analisando estrutura da página de login...")
-        logger.info(f"Título da página: {driver.title}")
-        logger.info(f"URL atual: {driver.current_url}")
-        
-        # NOVA ESTRATÉGIA: Remove possíveis overlays/modals que podem estar interceptando
+        # Remove possíveis overlays que podem interceptar cliques
         try:
             logger.info("Removendo possíveis overlays...")
-            # Remove elementos que podem estar interceptando (modals, overlays, etc.)
             driver.execute_script("""
+                // Remove overlays, modals, backdrop
                 var overlays = document.querySelectorAll('[class*="overlay"], [class*="modal"], [class*="backdrop"]');
                 overlays.forEach(function(overlay) {
-                    overlay.remove();
+                    if (overlay.style.display !== 'none') {
+                        overlay.remove();
+                    }
                 });
                 
-                // Remove elementos com z-index alto que podem estar na frente
+                // Remove elementos com z-index muito alto
                 var allElements = document.querySelectorAll('*');
                 allElements.forEach(function(el) {
                     var zIndex = window.getComputedStyle(el).zIndex;
@@ -406,6 +423,11 @@ def login():
             time.sleep(1)
         except Exception as e:
             logger.info(f"Erro ao remover overlays: {str(e)}")
+        
+        logger.info("Analisando estrutura da página de login...")
+        html = driver.page_source
+        logger.info(f"Título da página: {driver.title}")
+        logger.info(f"URL atual: {driver.current_url}")
         
         # Encontra e preenche o campo de email
         try:
@@ -431,7 +453,7 @@ def login():
             logger.error(f"Erro ao preencher senha: {str(e)}")
             return False
         
-        # NOVA ESTRATÉGIA: Múltiplas tentativas de clique no botão de login
+        # Múltiplas tentativas de clique no botão de login
         try:
             login_button = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Iniciar Sesión') or contains(text(), 'Iniciar Sesion')]"))
@@ -508,6 +530,7 @@ def login():
             
     except Exception as e:
         logger.error(f"Erro geral no login: {str(e)}")
+        logger.error(traceback.format_exc())
         return False
 
 def verify_authentication():
@@ -533,6 +556,11 @@ def navigate_to_novelties():
     try:
         driver = st.session_state.driver
         
+        # Verifica se já estamos na dashboard
+        logger.info("Verificando a página atual...")
+        current_url = driver.current_url
+        logger.info(f"URL atual: {current_url}")
+        
         # CORREÇÃO: URL correta para novelties
         logger.info("Navegando diretamente para a página de novelties...")
         driver.get("https://app.dropi.cl/dashboard/novelties")  # URL CORRIGIDA
@@ -542,25 +570,25 @@ def navigate_to_novelties():
         current_url = driver.current_url
         logger.info(f"URL atual após navegação: {current_url}")
         
-        # Verifica se há conteúdo de novelties na página
+        # Verifica se está autenticado
+        if not verify_authentication():
+            logger.error("Não está autenticado - redirecionado para página de registro/login")
+            return False
+        
+        # Espera até que a tabela de novelties seja carregada
+        logger.info("Verificando se a tabela de novelties foi carregada...")
         try:
-            # Aguarda elementos da página carregar
-            WebDriverWait(driver, 15).until(
-                lambda d: "novelties" in d.current_url.lower() or 
-                         len(d.find_elements(By.TAG_NAME, "table")) > 0 or
-                         "novelty" in d.page_source.lower()
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, "//table"))
             )
-            logger.info("Página de novelties carregada com sucesso")
-        except TimeoutException:
-            logger.warning("Timeout aguardando página de novelties")
-            # Verifica se está na página de login/registro
-            if "login" in current_url or "registro" in driver.page_source.lower():
-                logger.error("Redirecionado para página de login/registro - problema de autenticação")
-                return False
+            logger.info("Tabela de novelties encontrada!")
+        except:
+            logger.warning("Não foi possível encontrar a tabela, mas continuando...")
         
         return True
     except Exception as e:
         logger.error(f"Erro ao navegar até Novelties: {str(e)}")
+        logger.error(traceback.format_exc())
         return False
 
 def configure_entries_display():
@@ -582,15 +610,179 @@ def configure_entries_display():
             logger.error("Está na página de registro em vez de novelties - problema de autenticação")
             return False
         
-        # Resto da função permanece igual...
+        # Rola até o final da página
         logger.info("Rolando até o final da página para verificar opções de exibição...")
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(2)
+        time.sleep(2)  # Aguarda para verificar se a opção está presente
         
-        # Continua com o resto da lógica original...
+        # Procura especificamente pelo select com os atributos informados
+        logger.info("Procurando elemento select específico conforme HTML fornecido...")
         
+        entries_found = False
+        try:
+            # Método 1: Procura pelo elemento select específico
+            select_elements = driver.find_elements(By.XPATH, "//select[@name='select' and @id='select' and contains(@class, 'custom-select')]")
+            
+            if not select_elements:
+                # Método 2: Procura por qualquer select na página
+                select_elements = driver.find_elements(By.XPATH, "//select[contains(@class, 'custom-select') or contains(@class, 'form-control')]")
+            
+            if not select_elements:
+                # Método 3: Procura por qualquer select
+                select_elements = driver.find_elements(By.TAG_NAME, "select")
+            
+            if select_elements:
+                logger.info(f"Elemento select encontrado: {len(select_elements)} elementos")
+                
+                # Usa o primeiro select encontrado
+                select_element = select_elements[0]
+                
+                # Cria um objeto Select para manipular o elemento
+                select = Select(select_element)
+                
+                # Verifica se há uma opção com valor "1000"
+                options_text = [o.text for o in select.options]
+                logger.info(f"Opções disponíveis no select: {options_text}")
+                
+                try:
+                    # Primeiro tenta selecionar pelo texto visível "1000"
+                    select.select_by_visible_text("1000")
+                    logger.info("Selecionado '1000' pelo texto visível")
+                    entries_found = True
+                except Exception as e:
+                    logger.info(f"Erro ao selecionar por texto visível: {str(e)}")
+                    
+                    try:
+                        # Tenta selecionar pelo índice da opção que contém "1000"
+                        for i, option in enumerate(select.options):
+                            if "1000" in option.text or "1000" in option.get_attribute("value"):
+                                select.select_by_index(i)
+                                logger.info(f"Selecionado '1000' pelo índice {i}")
+                                entries_found = True
+                                break
+                    except Exception as e:
+                        logger.info(f"Erro ao selecionar por índice: {str(e)}")
+                        
+                        try:
+                            # Último recurso: tenta selecionar qualquer valor que contenha "1000"
+                            for value in ["4: 1000", "1000", "4"]:  # Tenta vários formatos possíveis
+                                try:
+                                    select.select_by_value(value)
+                                    logger.info(f"Selecionado '1000' pelo valor '{value}'")
+                                    entries_found = True
+                                    break
+                                except:
+                                    continue
+                        except Exception as e:
+                            logger.info(f"Erro ao selecionar por valor: {str(e)}")
+                
+                # Tenta também usando JavaScript
+                if not entries_found:
+                    try:
+                        logger.info("Tentando selecionar '1000' via JavaScript...")
+                        # Encontra o valor que contém 1000
+                        for option in select.options:
+                            if "1000" in option.text:
+                                value = option.get_attribute("value")
+                                # Define o valor diretamente via JavaScript
+                                driver.execute_script(f"arguments[0].value = '{value}';", select_element)
+                                # Dispara evento de change para atualizar a UI
+                                driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", select_element)
+                                logger.info(f"Selecionado '1000' via JavaScript com valor '{value}'")
+                                entries_found = True
+                                break
+                    except Exception as e:
+                        logger.info(f"Erro ao selecionar via JavaScript: {str(e)}")
+                
+                if entries_found:
+                    logger.info("Configurado para exibir 1000 entradas")
+                    st.session_state.found_pagination = True
+                    
+                    # Aguarda o carregamento da tabela com mais entradas
+                    logger.info("Aguardando carregamento da tabela com mais entradas...")
+                    time.sleep(5)
+                    
+                    # ADICIONADO: Espera explícita para o carregamento da tabela
+                    logger.info("Esperando explicitamente pelo carregamento das linhas da tabela...")
+                    try:
+                        # Espera até que haja pelo menos uma linha na tabela ou até 30 segundos
+                        WebDriverWait(driver, 30).until(
+                            lambda d: len(d.find_elements(By.XPATH, "//table/tbody/tr")) > 0
+                        )
+                        logger.info("Linhas da tabela carregadas com sucesso!")
+                    except TimeoutException:
+                        logger.warning("Timeout esperando pelas linhas da tabela. Verificando se há mensagem de 'Sem resultados'...")
+                        # Verifica se existe uma mensagem de "Sem resultados" ou similar
+                        try:
+                            no_results = driver.find_element(By.XPATH, "//*[contains(text(), 'No hay resultados') or contains(text(), 'No data') or contains(text(), 'Sem resultados')]")
+                            if no_results:
+                                logger.info(f"Mensagem encontrada: '{no_results.text}' - A tabela realmente parece estar vazia.")
+                        except:
+                            # Vamos tentar um outro seletor para as linhas
+                            logger.info("Tentando seletor alternativo para as linhas da tabela...")
+            else:
+                logger.warning("Não foi possível encontrar o elemento select")
+        except Exception as e:
+            logger.error(f"Erro ao configurar quantidade de entradas: {str(e)}")
+            logger.error(traceback.format_exc())
+        
+        # Volta para o topo da página
+        logger.info("Retornando ao topo da página...")
+        driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(1)
+        
+        # Agora obtém todas as linhas da tabela
+        logger.info("Contando linhas da tabela...")
+        try:
+            # MODIFICADO: Tenta diferentes XPaths para encontrar as linhas
+            rows = driver.find_elements(By.XPATH, "//table/tbody/tr")
+            
+            # Se não encontrou linhas, tenta um seletor mais genérico
+            if not rows:
+                logger.info("Nenhuma linha encontrada com o seletor padrão, tentando seletor alternativo...")
+                rows = driver.find_elements(By.XPATH, "//table//tr[position() > 1]")  # Ignora a primeira linha (cabeçalho)
+            
+            # Se ainda não encontrou, tenta outro seletor mais genérico
+            if not rows:
+                logger.info("Tentando outro seletor alternativo...")
+                rows = driver.find_elements(By.CSS_SELECTOR, "table tr:not(:first-child)")
+            
+            # Se continua sem encontrar, tenta um último recurso
+            if not rows:
+                logger.info("Último recurso: capturando todas as linhas...")
+                rows = driver.find_elements(By.TAG_NAME, "tr")
+                # Filtra as linhas para remover possíveis cabeçalhos
+                if len(rows) > 1:
+                    rows = rows[1:]  # Remove a primeira linha, que provavelmente é o cabeçalho
+            
+            st.session_state.rows = rows
+            st.session_state.total_items = len(rows)
+            logger.info(f"Total de {len(rows)} novelties encontradas para processar")
+            
+            # Se não encontrou nenhuma linha, tenta verificar se há mensagem indicando ausência de dados
+            if len(rows) == 0:
+                try:
+                    page_text = driver.find_element(By.TAG_NAME, "body").text
+                    logger.info(f"Texto da página: {page_text[:500]}...")  # Primeiros 500 caracteres
+                    
+                    # Verifica se há textos comuns que indicam ausência de dados
+                    no_data_texts = ["No hay resultados", "No data available", "No records found", "Sem resultados"]
+                    for text in no_data_texts:
+                        if text in page_text:
+                            logger.info(f"Mensagem encontrada: '{text}' - A tabela realmente parece estar vazia.")
+                except:
+                    pass
+        except Exception as e:
+            logger.error(f"Erro ao contar linhas da tabela: {str(e)}")
+            logger.error(traceback.format_exc())
+            logger.warning("Não foi possível contar as linhas da tabela. Usando valor padrão.")
+            st.session_state.rows = []
+            st.session_state.total_items = 0
+        
+        return True
     except Exception as e:
         logger.error(f"Erro ao configurar exibição de entradas: {str(e)}")
+        logger.error(traceback.format_exc())
         return False
 
 def extract_customer_info(driver):
@@ -1493,7 +1685,7 @@ def process_current_novelty():
         current_url = driver.current_url
         if "/novelties" not in current_url and "/dashboard" not in current_url:
             logger.info("Redirecionando para a página principal de novelties...")
-            driver.get("https://app.dropi.cl/dashboard/novelties")
+            driver.get("https://app.dropi.cl/dashboard/novelties")  # URL CORRIGIDA
             time.sleep(5)  # Aguarda o carregamento da página
         
         # Verifica se há rows para processar
@@ -1549,7 +1741,7 @@ def process_current_novelty():
                 # NOVA CORREÇÃO: Tenta navegar novamente para novelties se ainda não encontrou
                 if st.session_state.current_retry_count >= 2:
                     logger.warning("Tentando navegar novamente para a página de novelties...")
-                    driver.get("https://app.dropi.cl/dashboard/novelties")
+                    driver.get("https://app.dropi.cl/dashboard/novelties")  # URL CORRIGIDA
                     time.sleep(7)
                 
                 # Atualiza o progresso mesmo assim
@@ -1917,7 +2109,7 @@ def process_current_novelty():
                             
                             # Redireciona para a lista de novelties
                             logger.info("Redirecionando para a lista de novelties...")
-                            driver.get("https://app.dropi.cl/dashboard/novelties")  # URL atualizada para Chile
+                            driver.get("https://app.dropi.cl/dashboard/novelties")  # URL CORRIGIDA
                             
                             # Aguarda o carregamento da página
                             time.sleep(5)
@@ -1988,7 +2180,7 @@ def process_current_novelty():
                                 
                                 # Redireciona para a lista de novelties
                                 logger.info("Redirecionando para a lista de novelties...")
-                                driver.get("https://app.dropi.cl/dashboard/novelties")  # URL atualizada para Chile
+                                driver.get("https://app.dropi.cl/dashboard/novelties")  # URL CORRIGIDA
                                 
                                 # Aguarda o carregamento da página
                                 time.sleep(5)
@@ -2049,7 +2241,7 @@ def process_current_novelty():
                                         
                                         # Redireciona para a lista de novelties
                                         logger.info("Redirecionando para a lista de novelties...")
-                                        driver.get("https://app.dropi.cl/dashboard/novelties")  # URL atualizada para Chile
+                                        driver.get("https://app.dropi.cl/dashboard/novelties")  # URL CORRIGIDA
                                         
                                         # Aguarda o carregamento da página
                                         time.sleep(5)
@@ -2151,7 +2343,7 @@ def process_current_novelty():
             current_url = driver.current_url
             if "/novelties" not in current_url and "/dashboard" not in current_url:
                 logger.info("Retornando à lista de novelties para continuar o processamento...")
-                driver.get("https://app.dropi.cl/dashboard/novelties")  # URL atualizada para Chile
+                driver.get("https://app.dropi.cl/dashboard/novelties")  # URL CORRIGIDA
                 time.sleep(5)  # Aguarda o carregamento da página
                 
                 # Recarrega a lista de novelties se necessário
@@ -2222,7 +2414,7 @@ def process_current_novelty():
         # TRATAMENTO DE RECUPERAÇÃO DE ERRO CRÍTICO
         try:
             logger.info("Tentando recuperar de erro crítico, redirecionando para a página principal...")
-            driver.get("https://app.dropi.cl/dashboard/novelties")  # URL atualizada para Chile
+            driver.get("https://app.dropi.cl/dashboard/novelties")  # URL CORRIGIDA
             time.sleep(5)
             
             # Incrementa o índice para tentar a próxima novelty
@@ -2514,8 +2706,7 @@ if st.session_state.is_running:
         st.session_state.is_running = False
         st.success("Automação concluída com sucesso!")
 
-with tab2: # Remova esta linha se este for o script principal
-
+with tab2:
     # Filtros de data
     col1, col2 = st.columns(2)
     with col1:
@@ -2531,13 +2722,13 @@ with tab2: # Remova esta linha se este for o script principal
     if st.button("Atualizar Relatório", key="update_report"):
         start_date_str = start_datetime.strftime("%Y-%m-%d %H:%M:%S")
         end_date_str = end_datetime.strftime("%Y-%m-%d %H:%M:%S")
-        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
+        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str, THIS_COUNTRY)  # CORRIGIDO
         st.success("Relatório atualizado!")
 
     if 'filtered_data' not in st.session_state:
         start_date_str = start_datetime.strftime("%Y-%m-%d %H:%M:%S")
         end_date_str = end_datetime.strftime("%Y-%m-%d %H:%M:%S")
-        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str)
+        st.session_state.filtered_data = get_execution_history(start_date_str, end_date_str, THIS_COUNTRY)  # CORRIGIDO
 
     if 'filtered_data' in st.session_state and not st.session_state.filtered_data.empty:
         df_original = st.session_state.filtered_data.copy()
@@ -2558,12 +2749,9 @@ with tab2: # Remova esta linha se este for o script principal
             'total_processed': 'Total Processado',
             'successful': 'Sucessos',
             'failed': 'Falhas',
-            # 'execution_time': 'Tempo (segundos)' # Removido
-            # 'Tempo (minutos)' já está no nome correto
         }, inplace=True)
 
         # Seleciona e ordena as colunas para exibição
-        # Usando a nova coluna de minutos
         display_columns = ['Data', 'Total Processado', 'Sucessos', 'Falhas', 'Tempo (minutos)']
         display_df = display_df[display_columns]
         display_df = display_df.sort_values(by='Data', ascending=True)
@@ -2581,7 +2769,6 @@ with tab2: # Remova esta linha se este for o script principal
             'Total Processado': [total_processed],
             'Sucessos': [total_success],
             'Falhas': [total_failed],
-            # Exibe a média formatada em minutos na linha total
             'Tempo (minutos)': [f"{avg_time_minutes:.2f}"]
         })
 

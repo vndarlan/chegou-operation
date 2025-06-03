@@ -5,6 +5,8 @@ import psycopg2
 from psycopg2 import sql
 import pandas as pd
 import logging # Adicionar import de logging
+import sqlalchemy
+from sqlalchemy import create_engine, text
 
 logger = logging.getLogger(__name__) # Configurar logger para este módulo
 
@@ -218,48 +220,68 @@ def get_execution_history(start_date, end_date, country_filter=None):
     Busca o histórico de execuções dentro de um período.
     Opcionalmente filtra por país/origem se country_filter for fornecido.
     """
-    conn = None
     try:
-        conn = get_db_connection()
         logger.info(f"Buscando histórico de execução de {start_date} a {end_date}" + (f" para '{country_filter}'" if country_filter else ""))
 
-        # Monta a query base
-        base_query = """
-        SELECT execution_date, total_processed, successful, failed, execution_time, source_country
-        FROM execution_history
-        WHERE execution_date BETWEEN {start_placeholder} AND {end_placeholder}
-        """
-
-        params = [start_date, end_date]
-
-        # Adiciona filtro de país se fornecido
-        if country_filter:
-            base_query += " AND source_country = {country_placeholder}"
-            params.append(country_filter)
-
-        base_query += " ORDER BY execution_date DESC"
-
-        # Ajusta placeholders para o tipo de banco
+        # NOVA ABORDAGEM: Usa SQLAlchemy para evitar o warning
         if is_railway():
-            # PostgreSQL usa %s
-            query = base_query.format(start_placeholder="%s", end_placeholder="%s", country_placeholder="%s")
-            logger.debug(f"Executando query PostgreSQL: {query} com params: {params}")
-            df = pd.read_sql_query(query, conn, params=tuple(params)) # psycopg2 espera tupla
+            # Para Railway - PostgreSQL
+            database_url = os.environ.get('DATABASE_URL')
+            if database_url and database_url.startswith('postgres://'):
+                # SQLAlchemy precisa de postgresql:// em vez de postgres://
+                database_url = database_url.replace('postgres://', 'postgresql://', 1)
+            
+            # Cria engine SQLAlchemy
+            engine = create_engine(database_url)
+            
+            # Monta a query base
+            base_query = """
+            SELECT execution_date, total_processed, successful, failed, execution_time, source_country
+            FROM execution_history
+            WHERE execution_date BETWEEN %(start_date)s AND %(end_date)s
+            """
+            
+            params = {"start_date": start_date, "end_date": end_date}
+            
+            # Adiciona filtro de país se fornecido
+            if country_filter:
+                base_query += " AND source_country = %(country_filter)s"
+                params["country_filter"] = country_filter
+            
+            base_query += " ORDER BY execution_date DESC"
+            
+            # Executa com SQLAlchemy
+            with engine.connect() as conn:
+                df = pd.read_sql_query(text(base_query), conn, params=params)
+                
         else:
-            # SQLite usa ?
-            query = base_query.format(start_placeholder="?", end_placeholder="?", country_placeholder="?")
-            logger.debug(f"Executando query SQLite: {query} com params: {params}")
-            df = pd.read_sql_query(query, conn, params=params)
+            # Para SQLite local - mantém a abordagem atual
+            conn = get_db_connection()
+            
+            base_query = """
+            SELECT execution_date, total_processed, successful, failed, execution_time, source_country
+            FROM execution_history
+            WHERE execution_date BETWEEN ? AND ?
+            """
+            
+            params = [start_date, end_date]
+            
+            if country_filter:
+                base_query += " AND source_country = ?"
+                params.append(country_filter)
+            
+            base_query += " ORDER BY execution_date DESC"
+            
+            df = pd.read_sql_query(base_query, conn, params=params)
+            conn.close()
 
         logger.info(f"Histórico encontrado: {len(df)} registros.")
         return df
+        
     except Exception as e:
         logger.error(f"Erro ao buscar histórico de execução: {e}", exc_info=True)
         return pd.DataFrame() # Retorna DataFrame vazio em caso de erro
-    finally:
-        if conn:
-            conn.close()
-            logger.debug("Conexão com DB fechada após get_history.")
+
 
 
 # --- Funções load/save schedule_config (mantidas como antes) ---
