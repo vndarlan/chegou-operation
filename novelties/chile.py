@@ -19,44 +19,32 @@ import platform
 import re
 import datetime
 import plotly.express as px
-from db_connection import get_execution_history  # Certifique-se de importar esta função
+
+# Adiciona o diretório pai ao path para importar db_connection
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 try:
-    from db_connection import is_railway
+    from db_connection import get_execution_history, is_railway
 except ImportError:
+    st.error("❌ Erro ao importar db_connection. Verifique se o arquivo existe no diretório raiz.")
+    def get_execution_history(*args, **kwargs):
+        return pd.DataFrame()
     def is_railway():
         return "RAILWAY_ENVIRONMENT" in os.environ
-
-# CORREÇÃO PARA PROBLEMAS DE STREAMLIT
-try:
-    if hasattr(st, 'cache_data'):
-        st.cache_data.clear()
-    if hasattr(st, 'cache_resource'):
-        st.cache_resource.clear()
-except:
-    pass
-
-try:
-    st.set_page_config(
-        page_title="Dropi Automação Chile",
-        page_icon="🇨🇱",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-except:
-    pass
     
-THIS_COUNTRY = "chile" # Mude para "chile", "colombia", 
+THIS_COUNTRY = "chile"
 
 # Função para criar pasta de screenshots se não existir
 def create_screenshots_folder():
     if not os.path.exists("screenshots"):
         os.makedirs("screenshots")
-        logger.info("Pasta de screenshots criada")
+        return "screenshots"
     return "screenshots"
 
 # Título e descrição
-st.markdown("<h1 style='text-align: center;'>🇨🇱</h1>", unsafe_allow_html=True)
-# Adicionar CSS após o título
+st.markdown("<h1 style='text-align: center;'>🇨🇱 Automação Chile</h1>", unsafe_allow_html=True)
+
+# CSS customizado
 st.markdown("""
 <style>
     .stButton>button {
@@ -75,6 +63,11 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# Verifica se o usuário tem permissão
+if "logged_in" not in st.session_state or not st.session_state["logged_in"]:
+    st.error("❌ Você precisa estar logado para acessar esta página.")
+    st.stop()
 
 # Verificar e instalar dependências
 def check_dependencies():
