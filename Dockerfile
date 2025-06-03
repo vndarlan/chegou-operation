@@ -52,7 +52,12 @@ WORKDIR /app
 # Copia arquivos de requisitos primeiro (para aproveitar o cache de camadas)
 COPY requirements.txt .
 
-# Instala dependências Python
+# CORREÇÃO: Instala NumPy e Pandas com versões compatíveis primeiro
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir numpy>=1.24.0,<2.0.0 \
+    && pip install --no-cache-dir pandas>=2.0.0,<3.0.0
+
+# Instala o resto das dependências Python
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia o restante dos arquivos
