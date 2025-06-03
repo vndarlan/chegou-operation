@@ -1270,58 +1270,12 @@ def handle_simple_three_field_form(driver, form_modal, customer_info):
         except:
             pass
         
-        # Tenta clicar no botão "SAVE SOLUTION"
-        logger.info("Tentando clicar no botão 'SAVE SOLUTION'...")
-        try:
-            save_clicked = False
-            
-            # Busca pelo botão específico "SAVE SOLUTION"
-            save_patterns = ["SAVE SOLUTION", "Save Solution", "save solution"]
-            
-            for pattern in save_patterns:
-                try:
-                    save_buttons = driver.find_elements(By.XPATH, f"//button[contains(text(), '{pattern}')]")
-                    for button in save_buttons:
-                        if button.is_displayed():
-                            # Rola até o botão
-                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
-                            time.sleep(1)
-                            
-                            # Clica via JavaScript
-                            driver.execute_script("arguments[0].click();", button)
-                            logger.info(f"✅ Clicado no botão '{pattern}' via JavaScript")
-                            save_clicked = True
-                            break
-                    if save_clicked:
-                        break
-                except Exception as e:
-                    logger.info(f"Erro ao clicar no botão '{pattern}': {e}")
-            
-            # Se não encontrou pelo texto, tenta por classe
-            if not save_clicked:
-                try:
-                    save_buttons = driver.find_elements(By.XPATH, "//button[contains(@class, 'btn-success') or contains(@class, 'btn-primary')]")
-                    for button in save_buttons:
-                        if button.is_displayed():
-                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
-                            time.sleep(1)
-                            driver.execute_script("arguments[0].click();", button)
-                            logger.info("✅ Clicado no botão 'SAVE' por classe")
-                            save_clicked = True
-                            break
-                except Exception as e:
-                    logger.info(f"Erro ao clicar no botão por classe: {e}")
-            
-            if not save_clicked:
-                logger.warning("⚠️ Não foi possível clicar no botão 'SAVE SOLUTION'")
-                
-        except Exception as e:
-            logger.error(f"Erro ao tentar clicar no botão SAVE SOLUTION: {str(e)}")
-        
+        # CORREÇÃO: Remove o clique duplo - só preenche os campos
+        # O clique no botão será feito pela função principal
         logger.info(f"Total de {fields_filled} campos preenchidos no formulário simples")
         
-        # Aguarda processamento
-        time.sleep(3)
+        # NOVA VERIFICAÇÃO: Aguarda um pouco para garantir que os campos foram preenchidos
+        time.sleep(2)
         
         return fields_filled > 0
             
@@ -2400,18 +2354,43 @@ def process_current_novelty():
                     result = False
                 
                 # ADICIONADO: SEMPRE tenta clicar no botão de salvar, independentemente do resultado anterior
-                logger.info("PASSO CRÍTICO: Tentando explicitamente clicar no botão 'Save Solucion'...")
+                logger.info("PASSO CRÍTICO: Tentando clicar no botão 'Save Solution'...")
                 try:
                     # Pausa antes de tentar clicar
-                    time.sleep(2)
+                    time.sleep(3)
                     # Chama a função aprimorada de clique
                     save_clicked = click_save_button(driver)
                     if save_clicked:
-                        logger.info("✅ Botão 'Save Solucion' clicado com sucesso pelo fluxo explícito")
+                        logger.info("✅ Botão 'Save Solution' clicado com sucesso")
+                        
+                        # NOVA VERIFICAÇÃO: Aguarda e verifica se realmente foi salvo
+                        logger.info("Verificando se o formulário foi salvo com sucesso...")
+                        time.sleep(5)  # Aguarda mais tempo para processamento
+                        
+                        # Verifica se o modal foi fechado (indicativo de sucesso)
+                        try:
+                            modals_after = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal') and @style='display: block;']")
+                            if len(modals_after) == 0:
+                                logger.info("✅ Modal fechado - salvamento confirmado")
+                            else:
+                                logger.warning("⚠️ Modal ainda aberto - possível erro no salvamento")
+                        except Exception as modal_check_error:
+                            logger.info(f"Erro ao verificar modal: {modal_check_error}")
+                        
+                        # Verifica se apareceu mensagem de sucesso
+                        try:
+                            success_elements = driver.find_elements(By.XPATH, "//*[contains(text(), 'éxito') or contains(text(), 'success') or contains(text(), 'guardado') or contains(text(), 'saved')]")
+                            if success_elements:
+                                logger.info("✅ Mensagem de sucesso encontrada")
+                            else:
+                                logger.info("ℹ️ Nenhuma mensagem de sucesso explícita encontrada")
+                        except Exception as success_check_error:
+                            logger.info(f"Erro ao verificar mensagem de sucesso: {success_check_error}")
+                            
                     else:
-                        logger.warning("⚠️ Falha ao clicar no botão 'Save Solucion' pelo fluxo explícito")
+                        logger.warning("⚠️ Falha ao clicar no botão 'Save Solution'")
                 except Exception as explicit_save_error:
-                    logger.error(f"❌ Erro ao executar clique explícito: {explicit_save_error}")
+                    logger.error(f"❌ Erro ao executar clique: {explicit_save_error}")
                     
             except Exception as e:
                 logger.error(f"Erro ao identificar tipo de formulário: {e}")
@@ -2454,7 +2433,7 @@ def process_current_novelty():
                     driver.get("https://app.dropi.co/dashboard/novelties")
                     
                     # Aguarda o carregamento da página
-                    time.sleep(5)
+                    time.sleep(8)  # Aumentado para 8 segundos
                     
                     # Incrementa o índice para pular esta novelty
                     st.session_state.current_row_index += 1
@@ -2468,8 +2447,9 @@ def process_current_novelty():
             except Exception as e:
                 logger.info(f"Erro ao verificar popup de erro específico: {str(e)}")
             
-            # Espera adicional após salvar
-            time.sleep(5)
+            # Espera adicional após salvar - AUMENTADO
+            logger.info("Aguardando processamento adicional...")
+            time.sleep(8)  # Aumentado de 5 para 8 segundos
             
             # Procura e clica no popup "OK" que aparece após salvar
             logger.info("Procurando popup de confirmação com botão OK...")
@@ -2542,12 +2522,50 @@ def process_current_novelty():
             # Verifica se há novas guias abertas
             check_and_close_tabs()
             
+            # NOVA VERIFICAÇÃO FINAL: Confirma se realmente voltou para a lista de novelties
+            logger.info("Verificação final: confirmando se voltou para a lista de novelties...")
+            try:
+                current_url = driver.current_url
+                logger.info(f"URL atual após processamento: {current_url}")
+                
+                if "novelties" in current_url:
+                    logger.info("✅ Confirmado: ainda/voltou para a página de novelties")
+                    
+                    # Verifica se o botão "Solve" ainda está presente na linha processada
+                    try:
+                        # Recarrega as linhas para verificar
+                        fresh_rows = driver.find_elements(By.XPATH, "//table/tbody/tr")
+                        if fresh_rows and st.session_state.current_row_index < len(fresh_rows):
+                            current_row = fresh_rows[st.session_state.current_row_index]
+                            solve_buttons = current_row.find_elements(By.XPATH, ".//button[contains(text(), 'Solve')]")
+                            
+                            if not solve_buttons:
+                                logger.info("✅ Botão 'Solve' não encontrado na linha - indicativo de processamento bem-sucedido")
+                            else:
+                                logger.warning("⚠️ Botão 'Solve' ainda presente - possível falha no salvamento")
+                                # Registra como falha potencial mas continua
+                                st.session_state.failed_items.append({
+                                    "id": row_id, 
+                                    "error": "Botão 'Solve' ainda presente após processamento"
+                                })
+                                st.session_state.failed_count = len(st.session_state.failed_items)
+                    except Exception as solve_check_error:
+                        logger.info(f"Erro ao verificar botão Solve: {solve_check_error}")
+                else:
+                    logger.warning(f"⚠️ URL não está na página de novelties: {current_url}")
+                    # Tenta navegar de volta
+                    driver.get("https://app.dropi.co/dashboard/novelties")
+                    time.sleep(5)
+                    
+            except Exception as final_check_error:
+                logger.warning(f"Erro na verificação final: {final_check_error}")
+            
             # Incrementa contador de sucesso
             st.session_state.success_count += 1
             logger.info(f"Novelty {row_id} processada com sucesso!")
             
             # Pequena pausa entre processamentos
-            time.sleep(1)
+            time.sleep(2)  # Aumentado de 1 para 2 segundos
             
         except Exception as e:
             # Registra o erro
@@ -2648,7 +2666,7 @@ def click_save_button(driver):
                 for js_search in [
                     f"return Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === '{pattern}');",
                     f"return Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('{pattern}'));",
-                    f"return Array.from(document.querySelectorAll('button')).find(b => b.textContent.toLowerCase().includes('{pattern.toLowerCase()}'));"
+                    f"return Array.from(document.querySelectorAll('button')).find(b => b.textContent.toLowerCase().includes('{pattern.lower()}'));"
                 ]:
                     try:
                         result = driver.execute_script(js_search)
