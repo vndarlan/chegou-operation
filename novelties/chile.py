@@ -10,6 +10,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, ElementClickInterceptedException
 from selenium.webdriver.support.ui import Select
+from selenium.webdriver.common.keys import Keys
 import logging
 import traceback
 from io import StringIO
@@ -211,6 +212,188 @@ with tab1:
 # Interface do usuário
 col1, col2 = st.columns([2, 1])
 
+# FUNÇÕES DE DEBUG E VERIFICAÇÃO
+def verify_credentials_and_urls():
+    """Verifica se as credenciais e URLs estão corretas."""
+    logger.info("=== VERIFICAÇÃO DE CREDENCIAIS E URLS ===")
+    
+    # CREDENCIAIS ATUAIS
+    current_email = "llegolatiendachile@gmail.com"
+    current_password = "Chegou123!"
+    
+    logger.info(f"Email atual: {current_email}")
+    logger.info(f"Senha atual: {'*' * len(current_password)}")
+    
+    # TESTE: URLs DO DROPI QUE PODEM TER MUDADO
+    test_urls = [
+        "https://app.dropi.cl",
+        "https://app.dropi.cl/auth/login", 
+        "https://app.dropi.cl/login",
+        "https://dropi.cl/login",
+        "https://app.dropi.co/auth/login",
+        "https://panel.dropi.cl/login",
+        "https://admin.dropi.cl/login"
+    ]
+    
+    logger.info("URLs sendo testadas:")
+    for url in test_urls:
+        logger.info(f"  - {url}")
+    
+    return current_email, current_password, test_urls
+
+def test_login_page_accessibility():
+    """Testa se as páginas de login estão acessíveis."""
+    try:
+        driver = st.session_state.driver
+        
+        urls_to_test = [
+            "https://app.dropi.cl/auth/login",
+            "https://app.dropi.cl/login", 
+            "https://dropi.cl/login"
+        ]
+        
+        accessible_urls = []
+        
+        for url in urls_to_test:
+            try:
+                logger.info(f"Testando acessibilidade de: {url}")
+                driver.get(url)
+                time.sleep(3)
+                
+                current_url = driver.current_url
+                page_title = driver.title
+                
+                # Verifica se tem campos de login
+                email_inputs = driver.find_elements(By.XPATH, "//input[@type='email' or contains(@name, 'email') or contains(@placeholder, 'email')]")
+                password_inputs = driver.find_elements(By.XPATH, "//input[@type='password']")
+                
+                if email_inputs and password_inputs:
+                    accessible_urls.append({
+                        "url": url,
+                        "final_url": current_url,
+                        "title": page_title,
+                        "has_login_form": True
+                    })
+                    logger.info(f"✅ {url} - ACESSÍVEL com formulário de login")
+                else:
+                    logger.warning(f"❌ {url} - Sem formulário de login válido")
+                    
+            except Exception as e:
+                logger.error(f"❌ Erro ao acessar {url}: {str(e)}")
+        
+        return accessible_urls
+        
+    except Exception as e:
+        logger.error(f"Erro no teste de acessibilidade: {str(e)}")
+        return []
+
+def alternative_login_flow():
+    """Fluxo de login alternativo para casos especiais."""
+    try:
+        driver = st.session_state.driver
+        
+        logger.info("=== TENTANDO FLUXO DE LOGIN ALTERNATIVO ===")
+        
+        # Tenta limpar cookies e cache primeiro
+        try:
+            driver.delete_all_cookies()
+            logger.info("Cookies limpos")
+        except:
+            pass
+        
+        # URLs alternativas com diferentes formatos
+        alternative_urls = [
+            "https://app.dropi.cl/",  # Página inicial primeiro
+            "https://dropi.cl/", 
+            "https://panel.dropi.cl/"
+        ]
+        
+        for base_url in alternative_urls:
+            try:
+                logger.info(f"Tentando acesso via: {base_url}")
+                driver.get(base_url)
+                time.sleep(3)
+                
+                # Procura por links de login na página
+                login_links = driver.find_elements(By.XPATH, "//a[contains(@href, 'login') or contains(text(), 'Login') or contains(text(), 'Iniciar')]")
+                
+                if login_links:
+                    for link in login_links:
+                        if link.is_displayed():
+                            try:
+                                logger.info(f"Clicando em link de login: {link.text}")
+                                link.click()
+                                time.sleep(3)
+                                
+                                # Verifica se chegou na página de login
+                                current_url = driver.current_url
+                                if "login" in current_url.lower():
+                                    logger.info(f"✅ Página de login alcançada via link: {current_url}")
+                                    return True
+                            except Exception as e:
+                                logger.info(f"Erro ao clicar no link: {str(e)}")
+                                continue
+                
+            except Exception as e:
+                logger.info(f"Erro ao tentar {base_url}: {str(e)}")
+                continue
+        
+        return False
+        
+    except Exception as e:
+        logger.error(f"Erro no fluxo alternativo: {str(e)}")
+        return False
+
+def show_debug_instructions():
+    """Mostra instruções de debug para o usuário."""
+    logger.info("=== INSTRUÇÕES DE DEBUG ===")
+    logger.info("1. Verifique se as credenciais estão corretas:")
+    logger.info(f"   Email: llegolatiendachile@gmail.com")
+    logger.info(f"   Senha: Chegou123!")
+    logger.info("")
+    logger.info("2. Verifique se o site está funcionando:")
+    logger.info("   - Acesse https://app.dropi.cl/auth/login manualmente")
+    logger.info("   - Teste o login manual com as credenciais")
+    logger.info("")
+    logger.info("3. Possíveis problemas:")
+    logger.info("   - Site do Dropi pode estar fora do ar")
+    logger.info("   - Credenciais podem ter expirado")
+    logger.info("   - URL de login pode ter mudado")
+    logger.info("   - Pode ter captcha ou 2FA ativado")
+    logger.info("")
+    logger.info("4. Verifique os screenshots salvos em /app/screenshots/")
+    logger.info("   - login_page.png (como a página aparece)")
+    logger.info("   - after_login.png (resultado após tentativa)")
+    logger.info("=====================================")
+
+# Interface de teste manual de credenciais
+def manual_credential_test():
+    """Permite testar credenciais manualmente."""
+    try:
+        logger.info("=== TESTE MANUAL DE CREDENCIAIS ===")
+        
+        # Cria uma interface simples no Streamlit para teste
+        with st.expander("🔧 Debug: Teste Manual de Credenciais", expanded=False):
+            st.write("Use esta seção para testar credenciais diferentes:")
+            
+            test_email = st.text_input("Email de teste:", value="llegolatiendachile@gmail.com")
+            test_password = st.text_input("Senha de teste:", value="Chegou123!", type="password")
+            
+            if st.button("Testar Credenciais"):
+                st.session_state.email = test_email
+                st.session_state.password = test_password
+                st.info(f"Credenciais atualizadas: {test_email}")
+                st.rerun()
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Erro no teste manual: {str(e)}")
+        return False
+
+# Mostra a interface de teste de credenciais
+manual_credential_test()
+
 with st.form("automation_form"):
     submit_button = st.form_submit_button("Iniciar Automação", use_container_width=True)
     
@@ -335,7 +518,7 @@ if st.session_state.report and not st.session_state.is_running:
 st.markdown("---")
 st.caption("Automação Dropi Novelties Chile © 2025")
 
-# Funções de automação (adaptadas para serem executadas passo a passo)
+# FUNÇÕES DE AUTOMAÇÃO 
 def setup_driver():
     """Configura o driver do Selenium."""
     logger.info("Iniciando configuração do driver Chrome...")
@@ -377,152 +560,371 @@ def setup_driver():
         logger.error(traceback.format_exc())
         return False
 
+def enhanced_setup_driver():
+    """Setup do driver com verificações adicionais."""
+    logger.info("=== SETUP AVANÇADO DO DRIVER ===")
+    
+    # Verifica credenciais primeiro
+    email, password, test_urls = verify_credentials_and_urls()
+    st.session_state.email = email
+    st.session_state.password = password
+    
+    # Setup normal do driver
+    if not setup_driver():
+        return False
+    
+    # Testa acessibilidade das páginas de login
+    accessible_urls = test_login_page_accessibility()
+    
+    if accessible_urls:
+        logger.info(f"✅ {len(accessible_urls)} URLs de login acessíveis encontradas")
+        for url_info in accessible_urls:
+            logger.info(f"  - {url_info['url']} -> {url_info['title']}")
+    else:
+        logger.error("❌ Nenhuma URL de login acessível encontrada")
+        # Tenta fluxo alternativo
+        if alternative_login_flow():
+            logger.info("✅ Fluxo alternativo funcionou")
+        else:
+            logger.error("❌ Fluxo alternativo também falhou")
+            return False
+    
+    return True
+
 def login():
-    """Função de login melhorada."""
+    """Função de login melhorada com debug detalhado."""
     try:
         driver = st.session_state.driver
         driver.maximize_window()
         
-        logger.info("Navegando para a página de login...")
-        driver.get("https://app.dropi.cl/auth/login")
-        time.sleep(5)
+        # CREDENCIAIS PARA TESTE - VERIFIQUE SE ESTÃO CORRETAS
+        email = st.session_state.email  # "llegolatiendachile@gmail.com"
+        password = st.session_state.password  # "Chegou123!"
+        
+        logger.info("=== INICIANDO PROCESSO DE LOGIN ===")
+        logger.info(f"Email configurado: {email}")
+        logger.info(f"Senha configurada: {'*' * len(password)}")
+        
+        # TESTE MÚLTIPLAS URLs DE LOGIN
+        login_urls = [
+            "https://app.dropi.cl/auth/login",
+            "https://app.dropi.cl/login", 
+            "https://dropi.cl/login",
+            "https://app.dropi.co/auth/login"
+        ]
+        
+        successful_url = None
+        
+        for url in login_urls:
+            try:
+                logger.info(f"Tentando URL: {url}")
+                driver.get(url)
+                time.sleep(3)
+                
+                current_url = driver.current_url
+                page_title = driver.title
+                logger.info(f"URL carregada: {current_url}")
+                logger.info(f"Título da página: {page_title}")
+                
+                # Verifica se chegou numa página válida
+                if "login" in current_url.lower() or "auth" in current_url.lower():
+                    successful_url = url
+                    logger.info(f"✅ URL válida encontrada: {url}")
+                    break
+                else:
+                    logger.warning(f"❌ URL {url} redirecionou para: {current_url}")
+                    
+            except Exception as e:
+                logger.warning(f"❌ Erro ao tentar URL {url}: {str(e)}")
+                continue
+        
+        if not successful_url:
+            logger.error("❌ Nenhuma URL de login válida encontrada")
+            return False
         
         # Aguarda a página carregar completamente
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
         
-        # Remove possíveis overlays que podem interceptar cliques
+        # CAPTURA SCREENSHOT PARA DEBUG
         try:
-            logger.info("Removendo possíveis overlays...")
-            driver.execute_script("""
-                // Remove overlays, modals, backdrop
-                var overlays = document.querySelectorAll('[class*="overlay"], [class*="modal"], [class*="backdrop"]');
-                overlays.forEach(function(overlay) {
-                    if (overlay.style.display !== 'none') {
-                        overlay.remove();
-                    }
-                });
-                
-                // Remove elementos com z-index muito alto
-                var allElements = document.querySelectorAll('*');
-                allElements.forEach(function(el) {
-                    var zIndex = window.getComputedStyle(el).zIndex;
-                    if (zIndex && parseInt(zIndex) > 1000) {
-                        el.style.zIndex = '1';
-                    }
-                });
-            """)
-            time.sleep(1)
+            screenshot_path = os.path.join(st.session_state.screenshots_folder, "login_page.png")
+            driver.save_screenshot(screenshot_path)
+            logger.info(f"Screenshot da página de login salvo: {screenshot_path}")
         except Exception as e:
-            logger.info(f"Erro ao remover overlays: {str(e)}")
+            logger.warning(f"Não foi possível salvar screenshot: {str(e)}")
         
-        logger.info("Analisando estrutura da página de login...")
-        html = driver.page_source
-        logger.info(f"Título da página: {driver.title}")
-        logger.info(f"URL atual: {driver.current_url}")
+        # ANALISA A ESTRUTURA DA PÁGINA
+        logger.info("=== ANALISANDO ESTRUTURA DA PÁGINA ===")
         
-        # Encontra e preenche o campo de email
-        try:
-            email_field = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "//input[@type='email']"))
-            )
-            email_field.clear()
-            email_field.send_keys(st.session_state.email)
-            logger.info(f"Email preenchido: {st.session_state.email}")
-        except Exception as e:
-            logger.error(f"Erro ao preencher email: {str(e)}")
-            return False
+        # Verifica se há campos de input visíveis
+        all_inputs = driver.find_elements(By.TAG_NAME, "input")
+        visible_inputs = [inp for inp in all_inputs if inp.is_displayed()]
+        logger.info(f"Total de inputs encontrados: {len(all_inputs)}")
+        logger.info(f"Inputs visíveis: {len(visible_inputs)}")
         
-        # Encontra e preenche o campo de senha
-        try:
-            password_field = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "//input[@type='password']"))
-            )
-            password_field.clear()
-            password_field.send_keys(st.session_state.password)
-            logger.info("Senha preenchida")
-        except Exception as e:
-            logger.error(f"Erro ao preencher senha: {str(e)}")
-            return False
+        # Lista todos os inputs visíveis
+        for i, inp in enumerate(visible_inputs):
+            input_type = inp.get_attribute("type")
+            input_name = inp.get_attribute("name")
+            input_id = inp.get_attribute("id")
+            input_placeholder = inp.get_attribute("placeholder")
+            logger.info(f"Input {i}: tipo='{input_type}', nome='{input_name}', id='{input_id}', placeholder='{input_placeholder}'")
         
-        # Múltiplas tentativas de clique no botão de login
-        try:
-            login_button = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Iniciar Sesión') or contains(text(), 'Iniciar Sesion')]"))
-            )
-            
-            logger.info("Tentando clicar no botão de login...")
-            
-            # Método 1: Scroll e clique normal
+        # PROCURA POR CAMPOS DE EMAIL COM MÚLTIPLOS SELETORES
+        email_field = None
+        email_selectors = [
+            "//input[@type='email']",
+            "//input[@name='email']",
+            "//input[@id='email']", 
+            "//input[contains(@placeholder, 'email')]",
+            "//input[contains(@placeholder, 'Email')]",
+            "//input[contains(@placeholder, 'correo')]",
+            "//input[contains(@name, 'user')]",
+            "//input[contains(@id, 'user')]"
+        ]
+        
+        for selector in email_selectors:
             try:
-                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", login_button)
-                time.sleep(1)
+                email_elements = driver.find_elements(By.XPATH, selector)
+                for element in email_elements:
+                    if element.is_displayed():
+                        email_field = element
+                        logger.info(f"✅ Campo de email encontrado com seletor: {selector}")
+                        break
+                if email_field:
+                    break
+            except Exception as e:
+                logger.info(f"Seletor {selector} falhou: {str(e)}")
+        
+        if not email_field:
+            logger.error("❌ Campo de email não encontrado")
+            # Tenta pegar o primeiro input de texto visível
+            text_inputs = [inp for inp in visible_inputs if inp.get_attribute("type") in ["text", "email", ""]]
+            if text_inputs:
+                email_field = text_inputs[0]
+                logger.warning(f"⚠️ Usando primeiro input de texto como campo de email")
+            else:
+                return False
+        
+        # PROCURA POR CAMPOS DE SENHA
+        password_field = None
+        password_selectors = [
+            "//input[@type='password']",
+            "//input[@name='password']",
+            "//input[@id='password']",
+            "//input[contains(@placeholder, 'senha')]",
+            "//input[contains(@placeholder, 'password')]",
+            "//input[contains(@placeholder, 'contraseña')]"
+        ]
+        
+        for selector in password_selectors:
+            try:
+                password_elements = driver.find_elements(By.XPATH, selector)
+                for element in password_elements:
+                    if element.is_displayed():
+                        password_field = element
+                        logger.info(f"✅ Campo de senha encontrado com seletor: {selector}")
+                        break
+                if password_field:
+                    break
+            except Exception as e:
+                logger.info(f"Seletor {selector} falhou: {str(e)}")
+        
+        if not password_field:
+            logger.error("❌ Campo de senha não encontrado")
+            return False
+        
+        # PREENCHE OS CAMPOS
+        logger.info("=== PREENCHENDO CAMPOS ===")
+        
+        try:
+            # Limpa e preenche email
+            driver.execute_script("arguments[0].scrollIntoView(true);", email_field)
+            time.sleep(0.5)
+            email_field.clear()
+            email_field.send_keys(email)
+            logger.info(f"✅ Email preenchido: {email}")
+            
+            # Verifica se o email foi realmente preenchido
+            email_value = email_field.get_attribute("value")
+            logger.info(f"Valor atual do campo email: '{email_value}'")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao preencher email: {str(e)}")
+            return False
+        
+        try:
+            # Limpa e preenche senha
+            driver.execute_script("arguments[0].scrollIntoView(true);", password_field)
+            time.sleep(0.5)
+            password_field.clear()
+            password_field.send_keys(password)
+            logger.info("✅ Senha preenchida")
+            
+            # Verifica se a senha foi realmente preenchida (sem mostrar o valor)
+            password_value = password_field.get_attribute("value")
+            logger.info(f"Campo senha preenchido: {len(password_value) > 0}")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao preencher senha: {str(e)}")
+            return False
+        
+        # PROCURA E CLICA NO BOTÃO DE LOGIN
+        logger.info("=== PROCURANDO BOTÃO DE LOGIN ===")
+        
+        login_button = None
+        login_selectors = [
+            "//button[contains(text(), 'Iniciar Sesión')]",
+            "//button[contains(text(), 'Iniciar Sesion')]", 
+            "//button[contains(text(), 'Login')]",
+            "//button[contains(text(), 'Entrar')]",
+            "//button[contains(text(), 'Ingresar')]",
+            "//input[@type='submit']",
+            "//button[@type='submit']",
+            "//button[contains(@class, 'login')]",
+            "//button[contains(@class, 'btn-primary')]"
+        ]
+        
+        for selector in login_selectors:
+            try:
+                login_elements = driver.find_elements(By.XPATH, selector)
+                for element in login_elements:
+                    if element.is_displayed():
+                        login_button = element
+                        logger.info(f"✅ Botão de login encontrado com seletor: {selector}")
+                        logger.info(f"Texto do botão: '{element.text}'")
+                        break
+                if login_button:
+                    break
+            except Exception as e:
+                logger.info(f"Seletor {selector} falhou: {str(e)}")
+        
+        if not login_button:
+            logger.error("❌ Botão de login não encontrado")
+            # Lista todos os botões visíveis para debug
+            all_buttons = driver.find_elements(By.TAG_NAME, "button")
+            visible_buttons = [btn for btn in all_buttons if btn.is_displayed()]
+            logger.info(f"Botões visíveis na página:")
+            for i, btn in enumerate(visible_buttons):
+                btn_text = btn.text
+                btn_type = btn.get_attribute("type")
+                btn_class = btn.get_attribute("class")
+                logger.info(f"Botão {i}: texto='{btn_text}', tipo='{btn_type}', classe='{btn_class}'")
+            return False
+        
+        # CLICA NO BOTÃO DE LOGIN
+        logger.info("=== TENTANDO FAZER LOGIN ===")
+        
+        try:
+            # Tenta múltiplos métodos de clique
+            driver.execute_script("arguments[0].scrollIntoView(true);", login_button)
+            time.sleep(1)
+            
+            # Método 1: Clique normal
+            try:
                 login_button.click()
-                logger.info("Clique normal no botão de login realizado")
+                logger.info("✅ Clique normal realizado")
             except Exception as e1:
                 logger.info(f"Clique normal falhou: {str(e1)}")
-                
-                # Método 2: JavaScript click
+                # Método 2: JavaScript
                 try:
                     driver.execute_script("arguments[0].click();", login_button)
-                    logger.info("Clique JavaScript no botão de login realizado")
+                    logger.info("✅ Clique JavaScript realizado")
                 except Exception as e2:
                     logger.info(f"Clique JavaScript falhou: {str(e2)}")
-                    
-                    # Método 3: Submit do formulário
+                    # Método 3: Enter no formulário
                     try:
-                        form = driver.find_element(By.TAG_NAME, "form")
-                        form.submit()
-                        logger.info("Submit do formulário realizado")
+                        password_field.send_keys(Keys.ENTER)
+                        logger.info("✅ Enter enviado")
                     except Exception as e3:
-                        logger.info(f"Submit do formulário falhou: {str(e3)}")
-                        
-                        # Método 4: Enter no campo de senha
-                        try:
-                            from selenium.webdriver.common.keys import Keys
-                            password_field.send_keys(Keys.ENTER)
-                            logger.info("Enter no campo de senha realizado")
-                        except Exception as e4:
-                            logger.error(f"Todos os métodos de login falharam: {str(e4)}")
-                            return False
-            
-            # Aguarda o redirecionamento
-            time.sleep(8)
-            
-            # Verifica se o login foi bem-sucedido
-            current_url = driver.current_url
-            logger.info(f"URL após tentativa de login: {current_url}")
-            
-            # Se ainda está na página de login, o login falhou
-            if "login" in current_url:
-                logger.error("Login falhou - ainda na página de login")
-                return False
-            
-            # Se chegou em uma página válida do dashboard
-            if "dashboard" in current_url or "orders" in current_url:
-                logger.info("Login bem-sucedido")
-                return True
-            
-            # Tenta navegar diretamente para o dashboard para verificar se está autenticado
-            logger.info("Verificando autenticação navegando para o dashboard...")
-            driver.get("https://app.dropi.cl/dashboard")
-            time.sleep(5)
-            
-            current_url = driver.current_url
-            if "login" not in current_url:
-                logger.info("Login confirmado - acesso ao dashboard autorizado")
-                return True
-            else:
-                logger.error("Login falhou - redirecionado de volta para login")
-                return False
-                
+                        logger.error(f"Todos os métodos de clique falharam: {str(e3)}")
+                        return False
         except Exception as e:
-            logger.error(f"Erro ao localizar/clicar no botão de login: {str(e)}")
+            logger.error(f"❌ Erro ao clicar no botão de login: {str(e)}")
             return False
+        
+        # AGUARDA E VERIFICA O RESULTADO
+        logger.info("=== VERIFICANDO RESULTADO DO LOGIN ===")
+        time.sleep(8)  # Aguarda o redirecionamento
+        
+        current_url = driver.current_url
+        page_title = driver.title
+        logger.info(f"URL após login: {current_url}")
+        logger.info(f"Título após login: {page_title}")
+        
+        # Captura screenshot após login
+        try:
+            screenshot_path = os.path.join(st.session_state.screenshots_folder, "after_login.png")
+            driver.save_screenshot(screenshot_path)
+            logger.info(f"Screenshot pós-login salvo: {screenshot_path}")
+        except:
+            pass
+        
+        # VERIFICA INDICADORES DE SUCESSO/FALHA
+        success_indicators = ["dashboard", "novelties", "orders", "panel"]
+        failure_indicators = ["login", "auth", "error", "invalid"]
+        
+        url_lower = current_url.lower()
+        
+        # Verifica indicadores de sucesso
+        for indicator in success_indicators:
+            if indicator in url_lower:
+                logger.info(f"✅ LOGIN BEM-SUCEDIDO - Indicador de sucesso encontrado: {indicator}")
+                return True
+        
+        # Verifica indicadores de falha
+        for indicator in failure_indicators:
+            if indicator in url_lower:
+                logger.warning(f"❌ Possível falha de login - Indicador: {indicator}")
+        
+        # Verifica mensagens de erro na página
+        try:
+            page_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+            error_messages = ["credenciais inválidas", "senha incorreta", "email incorreto", "login failed", "error"]
+            for error_msg in error_messages:
+                if error_msg in page_text:
+                    logger.error(f"❌ Mensagem de erro encontrada: {error_msg}")
+                    return False
+        except:
+            pass
+        
+        # Se não redirecionou da página de login, provavelmente falhou
+        if "login" in url_lower or "auth" in url_lower:
+            logger.error("❌ LOGIN FALHOU - Ainda na página de login")
+            return False
+        
+        # Teste final: tenta navegar para o dashboard
+        logger.info("=== TESTE FINAL: NAVEGANDO PARA DASHBOARD ===")
+        try:
+            dashboard_urls = [
+                "https://app.dropi.cl/dashboard",
+                "https://app.dropi.cl/dashboard/novelties"
+            ]
             
+            for dashboard_url in dashboard_urls:
+                try:
+                    driver.get(dashboard_url)
+                    time.sleep(3)
+                    final_url = driver.current_url
+                    
+                    if "login" not in final_url.lower():
+                        logger.info(f"✅ LOGIN CONFIRMADO - Acesso autorizado ao dashboard: {final_url}")
+                        return True
+                    else:
+                        logger.warning(f"❌ Redirecionado para login ao tentar acessar: {dashboard_url}")
+                except Exception as e:
+                    logger.info(f"Erro ao testar dashboard {dashboard_url}: {str(e)}")
+                    continue
+        except Exception as e:
+            logger.error(f"Erro no teste final: {str(e)}")
+        
+        logger.error("❌ LOGIN FALHOU - Não foi possível confirmar autenticação")
+        return False
+        
     except Exception as e:
-        logger.error(f"Erro geral no login: {str(e)}")
+        logger.error(f"❌ ERRO GERAL NO LOGIN: {str(e)}")
         logger.error(traceback.format_exc())
         return False
 
@@ -941,7 +1343,6 @@ def parse_chilean_address(address):
         }
         
         # PRIMEIRO: Sempre extrair o número (primeiro conjunto numérico) independentemente de outros processamentos
-        import re
         numero_match = re.search(r'\d+', address)
         if numero_match:
             components["numero"] = numero_match.group(0)
@@ -1554,11 +1955,6 @@ def fill_form_fields(driver, form_modal, customer_info):
         logger.error(f"Erro ao preencher campos do formulário: {str(e)}")
         return False
 
-def handle_empty_data_error(driver, customer_info):
-    """Função mantida para compatibilidade, não é mais utilizada ativamente."""
-    logger.info("Função handle_empty_data_error chamada, mas não está mais em uso ativo.")
-    return False
-
 def fill_field_by_label(driver, form_modal, label_texts, value):
     """Preenche um campo específico do formulário identificado por texto da label."""
     try:
@@ -1601,7 +1997,6 @@ def fill_field_by_label(driver, form_modal, label_texts, value):
                                         driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", input_field)
                                     
                                     # Simula interação de teclado
-                                    from selenium.webdriver.common.keys import Keys
                                     input_field.send_keys(Keys.TAB)
                                     
                                     # Verifica o valor após preenchimento
@@ -1648,7 +2043,6 @@ def fill_field_by_label(driver, form_modal, label_texts, value):
                                             driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", input_field)
                                             
                                         # Simula interação de teclado
-                                        from selenium.webdriver.common.keys import Keys
                                         input_field.send_keys(Keys.TAB)
                                         
                                         # Verifica o valor após preenchimento
@@ -1668,6 +2062,208 @@ def fill_field_by_label(driver, form_modal, label_texts, value):
     except Exception as e:
         logger.error(f"Erro ao preencher campo: {str(e)}")
         return False
+
+def click_save_button(driver):
+    """Tenta clicar no botão de salvar usando várias estratégias."""
+    try:
+        logger.info("Tentando clicar no botão de salvar...")
+        
+        # PAUSA MAIOR: Aumentando para 5 segundos para garantir que o formulário seja completamente validado
+        logger.info("Aguardando 5 segundos para garantir que o formulário esteja pronto e validado...")
+        time.sleep(5)
+        
+        save_clicked = False
+        
+        # Método 0: Procura especificamente por "SAVE SOLUCION" primeiro (PRIORIDADE MÁXIMA)
+        try:
+            logger.info("Procurando especificamente pelo botão 'SAVE SOLUCION'...")
+            
+            # Tenta vários formatos e combinações de case
+            save_solution_patterns = [
+                "SAVE SOLUCION", "Save Solucion", "save solucion", 
+                "SAVE SOLUTION", "Save Solution", "save solution",
+                "SAVE", "Save", "save",
+                "GUARDAR", "Guardar", "guardar",
+                "ENVIAR", "Enviar", "enviar"
+            ]
+            
+            for pattern in save_solution_patterns:
+                save_solution_buttons = driver.find_elements(By.XPATH, f"//button[contains(text(), '{pattern}')]")
+                
+                if save_solution_buttons:
+                    for button in save_solution_buttons:
+                        try:
+                            if button.is_displayed():
+                                logger.info(f"Botão com texto '{pattern}' encontrado, tentando clicar...")
+                                
+                                # Rola para garantir visibilidade e centraliza
+                                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+                                time.sleep(1)
+                                
+                                # IMPORTANTE: Tenta múltiplos métodos de clique
+                                try:
+                                    # Método 1: Clique direto
+                                    button.click()
+                                    logger.info(f"Clicado no botão '{pattern}' via clique direto")
+                                except Exception as click_error:
+                                    logger.info(f"Clique direto falhou: {str(click_error)}, tentando JavaScript...")
+                                    try:
+                                        # Método 2: JavaScript click
+                                        driver.execute_script("arguments[0].click();", button)
+                                        logger.info(f"Clicado no botão '{pattern}' via JavaScript")
+                                    except Exception as js_error:
+                                        logger.info(f"Clique JavaScript falhou: {str(js_error)}, tentando Actions...")
+                                        try:
+                                            # Método 3: Actions chains
+                                            from selenium.webdriver.common.action_chains import ActionChains
+                                            actions = ActionChains(driver)
+                                            actions.move_to_element(button).click().perform()
+                                            logger.info(f"Clicado no botão '{pattern}' via ActionChains")
+                                        except Exception as action_error:
+                                            logger.info(f"Todos os métodos de clique falharam: {str(action_error)}")
+                                            continue
+                                
+                                # Aguarda um pouco após clicar
+                                time.sleep(2)
+                                
+                                # Verifica se o botão ainda está visível (se o clique funcionou, ele pode ter desaparecido)
+                                try:
+                                    if not button.is_displayed():
+                                        logger.info(f"Botão '{pattern}' não está mais visível após o clique - sucesso!")
+                                        save_clicked = True
+                                        return True
+                                except:
+                                    # Se der erro ao verificar, provavelmente o botão foi removido do DOM
+                                    logger.info(f"Erro ao verificar visibilidade do botão - provável sucesso!")
+                                    save_clicked = True
+                                    return True
+                                
+                                # Se chegou aqui, o botão ainda está visível
+                                logger.info(f"Botão '{pattern}' ainda está visível após o clique, mas considerando como clicado")
+                                save_clicked = True
+                                return True
+                        except Exception as e:
+                            logger.info(f"Erro ao tentar clicar no botão '{pattern}': {str(e)}")
+                            continue
+            
+            if not save_clicked:
+                logger.info("Nenhum botão SAVE SOLUCION encontrado pelas variações de texto")
+        except Exception as e:
+            logger.info(f"Erro ao procurar botão 'SAVE SOLUCION': {str(e)}")
+        
+        if not save_clicked:
+            # Último recurso: Pressiona Enter como se tivesse enviado um formulário
+            try:
+                logger.info("Tentando enviar o formulário pressionando Enter...")
+                active_element = driver.switch_to.active_element
+                active_element.send_keys(Keys.ENTER)
+                logger.info("Tecla Enter enviada para o elemento ativo")
+                time.sleep(2)
+                save_clicked = True
+            except Exception as e:
+                logger.info(f"Erro ao enviar Enter: {str(e)}")
+        
+        # Mesmo que não tenha clicado, aguarda um pouco mais
+        time.sleep(3)
+        
+        return save_clicked
+    except Exception as e:
+        logger.error(f"Erro ao tentar clicar no botão de salvar: {str(e)}")
+        return False
+
+def check_and_close_tabs():
+    """Verifica se há novas guias abertas e as fecha."""
+    try:
+        driver = st.session_state.driver
+        # Obtém todas as guias
+        handles = driver.window_handles
+        
+        # Se houver mais de uma guia, fecha as extras
+        if len(handles) > 1:
+            current_handle = driver.current_window_handle
+            
+            for handle in handles:
+                if handle != current_handle:
+                    driver.switch_to.window(handle)
+                    driver.close()
+                    st.session_state.closed_tabs += 1
+            
+            # Volta para a guia principal
+            driver.switch_to.window(current_handle)
+            logger.info(f"Fechadas {len(handles) - 1} guias extras")
+    except Exception as e:
+        logger.error(f"Erro ao verificar e fechar guias: {str(e)}")
+
+def handle_error(row, row_id):
+    """Trata erros conforme o protocolo especificado."""
+    try:
+        driver = st.session_state.driver
+        logger.info(f"Iniciando tratamento de erro para novelty {row_id}...")
+        
+        # Tenta fechar qualquer modal/popup aberto
+        try:
+            logger.info("Tentando fechar popups abertos...")
+            close_buttons = driver.find_elements(By.XPATH, "//button[contains(@class, 'close') or contains(@class, 'btn-close')]")
+            for button in close_buttons:
+                if button.is_displayed():
+                    button.click()
+                    time.sleep(0.5)
+        except:
+            pass
+            
+        # Clica novamente no botão Save
+        try:
+            logger.info(f"Tentando fluxo alternativo para novelty {row_id}...")
+            logger.info("Clicando novamente no botão 'Save'...")
+            save_button = row.find_element(By.XPATH, ".//button[contains(@class, 'btn-success')]")
+            save_button.click()
+            
+            # Espera pelo popup e clica em "Não" desta vez
+            logger.info("Procurando e clicando no botão 'Não' no popup...")
+            nao_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Não')]"))
+            )
+            nao_button.click()
+            
+            # No segundo popup, clica em "Sim"
+            logger.info("Procurando e clicando no botão 'Sim' no segundo popup...")
+            sim_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Sim')]"))
+            )
+            sim_button.click()
+            
+            # Aguarda o modal fechar
+            time.sleep(2)
+            
+            logger.info(f"Tratamento alternativo aplicado com sucesso para novelty {row_id}")
+        except Exception as e:
+            logger.error(f"Erro ao aplicar tratamento alternativo para novelty {row_id}: {str(e)}")
+            
+            # Captura screenshot do erro
+            screenshots_folder = st.session_state.screenshots_folder
+            error_screenshot = os.path.join(screenshots_folder, f"error_treat_{row_id}.png")
+            try:
+                driver.save_screenshot(error_screenshot)
+                logger.info(f"Screenshot do erro de tratamento salvo em: {error_screenshot}")
+            except:
+                pass
+            
+            # Tenta fechar todos os popups novamente
+            try:
+                logger.info("Tentando fechar todos os popups após falha no tratamento alternativo...")
+                close_buttons = driver.find_elements(By.XPATH, "//button[contains(@class, 'close') or contains(@class, 'btn-close')]")
+                for button in close_buttons:
+                    if button.is_displayed():
+                        button.click()
+                        time.sleep(0.5)
+            except:
+                pass
+        
+        # Verifica se há novas guias abertas
+        check_and_close_tabs()
+            
+    except Exception as e:
+        logger.error(f"Erro ao tratar erro para novelty {row_id}: {str(e)}")
 
 def process_current_novelty():
     """Processa a novelty atual na lista."""
@@ -2419,209 +3015,6 @@ def process_current_novelty():
             logger.error("Falha na recuperação de erro crítico")
             return False
 
-def click_save_button(driver):
-    """Tenta clicar no botão de salvar usando várias estratégias."""
-    try:
-        logger.info("Tentando clicar no botão de salvar...")
-        
-        # PAUSA MAIOR: Aumentando para 5 segundos para garantir que o formulário seja completamente validado
-        logger.info("Aguardando 5 segundos para garantir que o formulário esteja pronto e validado...")
-        time.sleep(5)
-        
-        save_clicked = False
-        
-        # Método 0: Procura especificamente por "SAVE SOLUCION" primeiro (PRIORIDADE MÁXIMA)
-        try:
-            logger.info("Procurando especificamente pelo botão 'SAVE SOLUCION'...")
-            
-            # Tenta vários formatos e combinações de case
-            save_solution_patterns = [
-                "SAVE SOLUCION", "Save Solucion", "save solucion", 
-                "SAVE SOLUTION", "Save Solution", "save solution",
-                "SAVE", "Save", "save",
-                "GUARDAR", "Guardar", "guardar",
-                "ENVIAR", "Enviar", "enviar"
-            ]
-            
-            for pattern in save_solution_patterns:
-                save_solution_buttons = driver.find_elements(By.XPATH, f"//button[contains(text(), '{pattern}')]")
-                
-                if save_solution_buttons:
-                    for button in save_solution_buttons:
-                        try:
-                            if button.is_displayed():
-                                logger.info(f"Botão com texto '{pattern}' encontrado, tentando clicar...")
-                                
-                                # Rola para garantir visibilidade e centraliza
-                                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
-                                time.sleep(1)
-                                
-                                # IMPORTANTE: Tenta múltiplos métodos de clique
-                                try:
-                                    # Método 1: Clique direto
-                                    button.click()
-                                    logger.info(f"Clicado no botão '{pattern}' via clique direto")
-                                except Exception as click_error:
-                                    logger.info(f"Clique direto falhou: {str(click_error)}, tentando JavaScript...")
-                                    try:
-                                        # Método 2: JavaScript click
-                                        driver.execute_script("arguments[0].click();", button)
-                                        logger.info(f"Clicado no botão '{pattern}' via JavaScript")
-                                    except Exception as js_error:
-                                        logger.info(f"Clique JavaScript falhou: {str(js_error)}, tentando Actions...")
-                                        try:
-                                            # Método 3: Actions chains
-                                            from selenium.webdriver.common.action_chains import ActionChains
-                                            actions = ActionChains(driver)
-                                            actions.move_to_element(button).click().perform()
-                                            logger.info(f"Clicado no botão '{pattern}' via ActionChains")
-                                        except Exception as action_error:
-                                            logger.info(f"Todos os métodos de clique falharam: {str(action_error)}")
-                                            continue
-                                
-                                # Aguarda um pouco após clicar
-                                time.sleep(2)
-                                
-                                # Verifica se o botão ainda está visível (se o clique funcionou, ele pode ter desaparecido)
-                                try:
-                                    if not button.is_displayed():
-                                        logger.info(f"Botão '{pattern}' não está mais visível após o clique - sucesso!")
-                                        save_clicked = True
-                                        return True
-                                except:
-                                    # Se der erro ao verificar, provavelmente o botão foi removido do DOM
-                                    logger.info(f"Erro ao verificar visibilidade do botão - provável sucesso!")
-                                    save_clicked = True
-                                    return True
-                                
-                                # Se chegou aqui, o botão ainda está visível
-                                logger.info(f"Botão '{pattern}' ainda está visível após o clique, mas considerando como clicado")
-                                save_clicked = True
-                                return True
-                        except Exception as e:
-                            logger.info(f"Erro ao tentar clicar no botão '{pattern}': {str(e)}")
-                            continue
-            
-            if not save_clicked:
-                logger.info("Nenhum botão SAVE SOLUCION encontrado pelas variações de texto")
-        except Exception as e:
-            logger.info(f"Erro ao procurar botão 'SAVE SOLUCION': {str(e)}")
-        
-        if not save_clicked:
-            # Último recurso: Pressiona Enter como se tivesse enviado um formulário
-            try:
-                logger.info("Tentando enviar o formulário pressionando Enter...")
-                from selenium.webdriver.common.keys import Keys
-                active_element = driver.switch_to.active_element
-                active_element.send_keys(Keys.ENTER)
-                logger.info("Tecla Enter enviada para o elemento ativo")
-                time.sleep(2)
-                save_clicked = True
-            except Exception as e:
-                logger.info(f"Erro ao enviar Enter: {str(e)}")
-        
-        # Mesmo que não tenha clicado, aguarda um pouco mais
-        time.sleep(3)
-        
-        return save_clicked
-    except Exception as e:
-        logger.error(f"Erro ao tentar clicar no botão de salvar: {str(e)}")
-        return False
-
-def check_and_close_tabs():
-    """Verifica se há novas guias abertas e as fecha."""
-    try:
-        driver = st.session_state.driver
-        # Obtém todas as guias
-        handles = driver.window_handles
-        
-        # Se houver mais de uma guia, fecha as extras
-        if len(handles) > 1:
-            current_handle = driver.current_window_handle
-            
-            for handle in handles:
-                if handle != current_handle:
-                    driver.switch_to.window(handle)
-                    driver.close()
-                    st.session_state.closed_tabs += 1
-            
-            # Volta para a guia principal
-            driver.switch_to.window(current_handle)
-            logger.info(f"Fechadas {len(handles) - 1} guias extras")
-    except Exception as e:
-        logger.error(f"Erro ao verificar e fechar guias: {str(e)}")
-
-def handle_error(row, row_id):
-    """Trata erros conforme o protocolo especificado."""
-    try:
-        driver = st.session_state.driver
-        logger.info(f"Iniciando tratamento de erro para novelty {row_id}...")
-        
-        # Tenta fechar qualquer modal/popup aberto
-        try:
-            logger.info("Tentando fechar popups abertos...")
-            close_buttons = driver.find_elements(By.XPATH, "//button[contains(@class, 'close') or contains(@class, 'btn-close')]")
-            for button in close_buttons:
-                if button.is_displayed():
-                    button.click()
-                    time.sleep(0.5)
-        except:
-            pass
-            
-        # Clica novamente no botão Save
-        try:
-            logger.info(f"Tentando fluxo alternativo para novelty {row_id}...")
-            logger.info("Clicando novamente no botão 'Save'...")
-            save_button = row.find_element(By.XPATH, ".//button[contains(@class, 'btn-success')]")
-            save_button.click()
-            
-            # Espera pelo popup e clica em "Não" desta vez
-            logger.info("Procurando e clicando no botão 'Não' no popup...")
-            nao_button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Não')]"))
-            )
-            nao_button.click()
-            
-            # No segundo popup, clica em "Sim"
-            logger.info("Procurando e clicando no botão 'Sim' no segundo popup...")
-            sim_button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Sim')]"))
-            )
-            sim_button.click()
-            
-            # Aguarda o modal fechar
-            time.sleep(2)
-            
-            logger.info(f"Tratamento alternativo aplicado com sucesso para novelty {row_id}")
-        except Exception as e:
-            logger.error(f"Erro ao aplicar tratamento alternativo para novelty {row_id}: {str(e)}")
-            
-            # Captura screenshot do erro
-            screenshots_folder = st.session_state.screenshots_folder
-            error_screenshot = os.path.join(screenshots_folder, f"error_treat_{row_id}.png")
-            try:
-                driver.save_screenshot(error_screenshot)
-                logger.info(f"Screenshot do erro de tratamento salvo em: {error_screenshot}")
-            except:
-                pass
-            
-            # Tenta fechar todos os popups novamente
-            try:
-                logger.info("Tentando fechar todos os popups após falha no tratamento alternativo...")
-                close_buttons = driver.find_elements(By.XPATH, "//button[contains(@class, 'close') or contains(@class, 'btn-close')]")
-                for button in close_buttons:
-                    if button.is_displayed():
-                        button.click()
-                        time.sleep(0.5)
-            except:
-                pass
-        
-        # Verifica se há novas guias abertas
-        check_and_close_tabs()
-            
-    except Exception as e:
-        logger.error(f"Erro ao tratar erro para novelty {row_id}: {str(e)}")
-
 def generate_report():
     """Gera um relatório da execução."""
     report = {
@@ -2651,7 +3044,7 @@ def generate_report():
 if st.session_state.is_running:
     # Etapas da automação
     if st.session_state.automation_step == 'setup':
-        if setup_driver():
+        if enhanced_setup_driver():
             st.session_state.automation_step = 'login'
             st.rerun()
         else:
