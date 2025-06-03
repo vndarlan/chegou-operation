@@ -1530,7 +1530,7 @@ def extract_address_from_page(driver):
         return "Endereço de Entrega"
 
 def fill_solution_field(driver, form_modal, address):
-    """Preenche especificamente o campo Solución com o endereço usando técnicas avançadas."""
+    """Preenche especificamente o campo Solución E o campo Specify Address com o endereço usando técnicas avançadas."""
     try:
         logger.info("Iniciando identificação super-específica do campo Solución...")
         
@@ -1702,7 +1702,7 @@ def fill_solution_field(driver, form_modal, address):
             
             return False
         
-        # Preenche o campo encontrado
+        # Preenche o campo SOLUCIÓN encontrado
         solution_field = solution_fields[0]  # Pega o primeiro campo encontrado
         
         # Destaca o campo encontrado para verificação visual
@@ -1715,12 +1715,12 @@ def fill_solution_field(driver, form_modal, address):
         except:
             pass
         
-        # Agora tenta preencher o campo de MÚLTIPLAS maneiras
-        filled = False
+        # Agora tenta preencher o campo SOLUCIÓN de MÚLTIPLAS maneiras
+        solution_filled = False
         
         # Método 1: Limpar e preencher direto com JavaScript
         try:
-            logger.info("Tentando preencher via JavaScript...")
+            logger.info("Tentando preencher SOLUCIÓN via JavaScript...")
             
             # Escapa caracteres especiais para o JavaScript
             safe_address = address.replace("'", "\\'").replace("\\", "\\\\")
@@ -1745,18 +1745,18 @@ def fill_solution_field(driver, form_modal, address):
             
             time.sleep(0.5)
             value = solution_field.get_attribute("value")
-            logger.info(f"Valor após preenchimento JS: '{value}'")
+            logger.info(f"Valor após preenchimento JS (Solución): '{value}'")
             
             if value and value.strip():
-                filled = True
-                logger.info("Campo preenchido com sucesso via JavaScript")
+                solution_filled = True
+                logger.info("Campo SOLUCIÓN preenchido com sucesso via JavaScript")
         except Exception as e_js:
-            logger.warning(f"Erro ao preencher via JavaScript: {e_js}")
+            logger.warning(f"Erro ao preencher SOLUCIÓN via JavaScript: {e_js}")
         
         # Método 2: Selenium padrão (se o JS falhou)
-        if not filled:
+        if not solution_filled:
             try:
-                logger.info("Tentando preencher via Selenium padrão...")
+                logger.info("Tentando preencher SOLUCIÓN via Selenium padrão...")
                 
                 # Rola para o campo
                 driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", solution_field)
@@ -1773,24 +1773,221 @@ def fill_solution_field(driver, form_modal, address):
                 time.sleep(0.5)
                 
                 value = solution_field.get_attribute("value")
-                logger.info(f"Valor após preenchimento Selenium: '{value}'")
+                logger.info(f"Valor após preenchimento Selenium (Solución): '{value}'")
                 
                 if value and value.strip():
-                    filled = True
-                    logger.info("Campo preenchido com sucesso via Selenium")
+                    solution_filled = True
+                    logger.info("Campo SOLUCIÓN preenchido com sucesso via Selenium")
             except Exception as e_sel:
-                logger.warning(f"Erro ao preencher via Selenium: {e_sel}")
+                logger.warning(f"Erro ao preencher SOLUCIÓN via Selenium: {e_sel}")
         
-        # Verifica o resultado final
+        # =================== NOVO: PREENCHER CAMPO "SPECIFY ADDRESS" ===================
+        logger.info("=== INICIANDO PREENCHIMENTO DO CAMPO 'SPECIFY ADDRESS' ===")
+        
+        specify_address_filled = False
+        specify_address_field = None
+        
+        # Busca pelo campo "Specify Address"
+        try:
+            # Método 1: Busca pela label "Specify Address"
+            logger.info("Procurando campo 'Specify Address' pela label...")
+            specify_labels = driver.find_elements(By.XPATH, 
+                "//label[contains(text(), 'Specify Address') or contains(text(), 'specify address') or contains(text(), 'Specify address')]")
+            
+            for label in specify_labels:
+                if label.is_displayed():
+                    logger.info(f"Label 'Specify Address' encontrada: '{label.text}'")
+                    
+                    # Verifica se a label tem atributo 'for'
+                    for_attr = label.get_attribute("for")
+                    if for_attr:
+                        try:
+                            field = driver.find_element(By.ID, for_attr)
+                            if field.is_displayed():
+                                specify_address_field = field
+                                logger.info(f"Campo 'Specify Address' encontrado pelo atributo for='{for_attr}'")
+                                break
+                        except:
+                            pass
+                    
+                    # Se não tem 'for', procura o próximo campo
+                    if not specify_address_field:
+                        try:
+                            field = driver.execute_script("""
+                                var label = arguments[0];
+                                // Tenta encontrar o próximo elemento input/textarea
+                                var next = label.nextElementSibling;
+                                if (next && (next.tagName === 'INPUT' || next.tagName === 'TEXTAREA')) {
+                                    return next;
+                                }
+                                // Procura dentro do pai
+                                var parent = label.parentElement;
+                                var inputs = parent.querySelectorAll('input, textarea');
+                                for (var i = 0; i < inputs.length; i++) {
+                                    if (inputs[i] !== label) {
+                                        return inputs[i];
+                                    }
+                                }
+                                return null;
+                            """, label)
+                            
+                            if field and field.is_displayed():
+                                specify_address_field = field
+                                logger.info("Campo 'Specify Address' encontrado próximo à label via JavaScript")
+                                break
+                        except Exception as e_js2:
+                            logger.warning(f"Erro ao buscar campo 'Specify Address' via JavaScript: {e_js2}")
+                    
+                    if specify_address_field:
+                        break
+            
+            # Método 2: Se não encontrou pela label, procura por campos vazios abaixo da "Dirección"
+            if not specify_address_field:
+                logger.info("Método alternativo: Procurando por campos vazios após 'Dirección'...")
+                
+                # Primeiro encontra o campo "Dirección"
+                direccion_labels = driver.find_elements(By.XPATH, 
+                    "//label[contains(text(), 'Dirección') or contains(text(), 'dirección')]")
+                
+                for direccion_label in direccion_labels:
+                    if direccion_label.is_displayed():
+                        logger.info("Label 'Dirección' encontrada, procurando campos seguintes...")
+                        
+                        # Procura todos os inputs/textareas que vêm depois desta label
+                        following_inputs = driver.execute_script("""
+                            var direccionLabel = arguments[0];
+                            var allInputs = document.querySelectorAll('input, textarea');
+                            var direccionIndex = Array.from(allInputs).findIndex(el => {
+                                var rect = el.getBoundingClientRect();
+                                var labelRect = direccionLabel.getBoundingClientRect();
+                                return rect.top > labelRect.top;
+                            });
+                            
+                            if (direccionIndex >= 0) {
+                                // Retorna os próximos 3 campos após Dirección
+                                return Array.from(allInputs).slice(direccionIndex, direccionIndex + 3)
+                                    .filter(el => el.offsetParent !== null);
+                            }
+                            return [];
+                        """, direccion_label)
+                        
+                        # Procura por um campo vazio entre os que vêm depois
+                        for field in following_inputs:
+                            try:
+                                field_value = field.get_attribute("value") or ""
+                                if not field_value.strip():  # Campo vazio
+                                    specify_address_field = field
+                                    logger.info("Campo vazio encontrado após 'Dirección' - assumindo como 'Specify Address'")
+                                    break
+                            except:
+                                continue
+                        
+                        if specify_address_field:
+                            break
+            
+            # Método 3: Última tentativa - pega o último campo vazio do formulário
+            if not specify_address_field:
+                logger.info("Última tentativa: Procurando último campo vazio do formulário...")
+                
+                empty_fields = driver.execute_script("""
+                    var modal = document.querySelector('.modal.show, ngb-modal-window.show');
+                    if (!modal) return [];
+                    
+                    var allFields = modal.querySelectorAll('input[type="text"], textarea');
+                    var emptyFields = [];
+                    
+                    for (var i = 0; i < allFields.length; i++) {
+                        var field = allFields[i];
+                        if (field.offsetParent !== null && (!field.value || field.value.trim() === '')) {
+                            emptyFields.push(field);
+                        }
+                    }
+                    
+                    return emptyFields;
+                """)
+                
+                if empty_fields and len(empty_fields) > 0:
+                    # Pega o último campo vazio (mais provável de ser o Specify Address)
+                    specify_address_field = empty_fields[-1]
+                    logger.info("Usando último campo vazio como 'Specify Address'")
+        
+        except Exception as e_specify:
+            logger.error(f"Erro ao procurar campo 'Specify Address': {e_specify}")
+        
+        # Preenche o campo "Specify Address" se encontrado
+        if specify_address_field:
+            try:
+                # Destaca o campo para verificação visual
+                driver.execute_script("""
+                    arguments[0].style.border = '3px solid blue';
+                    arguments[0].style.backgroundColor = 'lightblue';
+                """, specify_address_field)
+                save_screenshot(driver, "specify_address_field_found.png")
+                
+                logger.info("Tentando preencher 'Specify Address' via JavaScript...")
+                
+                # Escapa caracteres especiais
+                safe_address = address.replace("'", "\\'").replace("\\", "\\\\")
+                
+                driver.execute_script("""
+                    var field = arguments[0];
+                    var text = arguments[1];
+                    
+                    // Limpa o campo
+                    field.value = '';
+                    
+                    // Define o novo valor
+                    field.value = text;
+                    
+                    // Dispara eventos
+                    field.dispatchEvent(new Event('input', { bubbles: true }));
+                    field.dispatchEvent(new Event('change', { bubbles: true }));
+                    
+                    // Dá foco
+                    field.focus();
+                """, specify_address_field, safe_address)
+                
+                time.sleep(0.5)
+                value = specify_address_field.get_attribute("value")
+                logger.info(f"Valor após preenchimento (Specify Address): '{value}'")
+                
+                if value and value.strip():
+                    specify_address_filled = True
+                    logger.info("Campo 'SPECIFY ADDRESS' preenchido com sucesso!")
+                else:
+                    # Tenta método Selenium como fallback
+                    logger.info("Tentando preencher 'Specify Address' via Selenium...")
+                    specify_address_field.clear()
+                    specify_address_field.send_keys(address)
+                    
+                    value = specify_address_field.get_attribute("value")
+                    if value and value.strip():
+                        specify_address_filled = True
+                        logger.info("Campo 'SPECIFY ADDRESS' preenchido via Selenium!")
+                
+            except Exception as e_fill_specify:
+                logger.error(f"Erro ao preencher campo 'Specify Address': {e_fill_specify}")
+        else:
+            logger.warning("Campo 'Specify Address' não foi encontrado - pode não estar presente nesta novelty")
+        
+        # =================== FIM DO PREENCHIMENTO SPECIFY ADDRESS ===================
+        
+        # Verifica o resultado final de ambos os campos
         time.sleep(0.5)
-        value = solution_field.get_attribute("value")
-        logger.info(f"RESULTADO FINAL | Campo contém: '{value}'")
-        save_screenshot(driver, "after_fill_solution.png")
+        solution_value = solution_field.get_attribute("value")
+        logger.info(f"RESULTADO FINAL | Campo SOLUCIÓN contém: '{solution_value}'")
         
-        return filled
+        if specify_address_field:
+            specify_value = specify_address_field.get_attribute("value")
+            logger.info(f"RESULTADO FINAL | Campo SPECIFY ADDRESS contém: '{specify_value}'")
+        
+        save_screenshot(driver, "after_fill_both_fields.png")
+        
+        # Retorna True se pelo menos o campo Solución foi preenchido
+        return solution_filled
             
     except Exception as e:
-        logger.error(f"Erro crítico ao preencher campo Solución: {str(e)}")
+        logger.error(f"Erro crítico ao preencher campos: {str(e)}")
         logger.error(traceback.format_exc())
         save_screenshot(driver, "critical_error_fill.png")
         return False
