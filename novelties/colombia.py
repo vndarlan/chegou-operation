@@ -1208,80 +1208,91 @@ def click_no_yes_buttons(driver):
         return False
 
 def handle_simple_three_field_form(driver, form_modal, customer_info):
-    """Função especializada para lidar com o novo formulário simples de 3 campos."""
+    """Função corrigida para lidar com o formulário simples de 3 campos."""
     try:
         logger.info("Detectado formulário simples de 3 campos - usando tratamento específico...")
         
-        # Tirar screenshot antes de qualquer interação
-        try:
-            driver.save_screenshot("before_simple_form_interaction.png")
-            logger.info("Screenshot antes da interação com formulário simples")
-        except:
-            pass
+        driver.save_screenshot("before_simple_form_interaction.png")
+        logger.info("Screenshot antes da interação com formulário simples")
         
         fields_filled = 0
         
         # CAMPO 1: Preenche "Solución" com o endereço
         logger.info("Preenchendo campo 'Solución'...")
-        try:
-            solucion_filled = fill_field_by_label(driver, form_modal, 
-                                                ["Solución", "Solucion"], 
-                                                customer_info["address"])
-            if solucion_filled:
-                fields_filled += 1
-                logger.info("✅ Campo 'Solución' preenchido com sucesso")
-            else:
-                logger.warning("❌ Não foi possível preencher o campo 'Solución'")
-        except Exception as e:
-            logger.error(f"Erro ao preencher campo 'Solución': {str(e)}")
+        solucion_filled = fill_field_by_label(driver, form_modal, 
+                                            ["Solución", "Solucion"], 
+                                            customer_info["address"])
+        if solucion_filled:
+            fields_filled += 1
+            logger.info("✅ Campo 'Solución' preenchido com sucesso")
+        else:
+            logger.warning("❌ Não foi possível preencher o campo 'Solución'")
         
-        # CAMPO 2: Preenche "Confirmar dirección destinatario" com o endereço
+        # CAMPO 2: Preenche "Confirmar dirección destinatario" - BUSCA MELHORADA
         logger.info("Preenchendo campo 'Confirmar dirección destinatario'...")
-        try:
-            direccion_filled = fill_field_by_label(driver, form_modal, 
-                                                 ["Confirmar dirección destinatario", "Confirmar direccion destinatario"], 
-                                                 customer_info["address"])
+        direccion_filled = False
+        
+        # Tenta várias variações do nome do campo
+        direccion_variations = [
+            "Confirmar dirección destinatario",
+            "Confirmar direccion destinatario", 
+            "confirmar direccion",
+            "direccion destinatario",
+            "direccion",
+            "address"
+        ]
+        
+        for variation in direccion_variations:
             if direccion_filled:
-                fields_filled += 1
-                logger.info("✅ Campo 'Confirmar dirección destinatario' preenchido com sucesso")
-            else:
-                logger.warning("❌ Não foi possível preencher o campo 'Confirmar dirección destinatario'")
-        except Exception as e:
-            logger.error(f"Erro ao preencher campo 'Confirmar dirección destinatario': {str(e)}")
+                break
+            direccion_filled = fill_field_by_label(driver, form_modal, [variation], customer_info["address"])
         
-        # CAMPO 3: Preenche "Confirmar celular destinatario" com o telefone
+        if direccion_filled:
+            fields_filled += 1
+            logger.info("✅ Campo 'Confirmar dirección destinatario' preenchido com sucesso")
+        else:
+            logger.warning("❌ Não foi possível preencher o campo 'Confirmar dirección destinatario'")
+        
+        # CAMPO 3: Preenche "Confirmar celular destinatario" - BUSCA MELHORADA
         logger.info("Preenchendo campo 'Confirmar celular destinatario'...")
-        try:
-            celular_filled = fill_field_by_label(driver, form_modal, 
-                                                ["Confirmar celular destinatario", "Confirmar celular destinatario"], 
-                                                customer_info["phone"])
+        celular_filled = False
+        
+        # Tenta várias variações do nome do campo
+        celular_variations = [
+            "Confirmar celular destinatario",
+            "confirmar celular",
+            "celular destinatario", 
+            "celular",
+            "telefono",
+            "phone"
+        ]
+        
+        for variation in celular_variations:
             if celular_filled:
-                fields_filled += 1
-                logger.info("✅ Campo 'Confirmar celular destinatario' preenchido com sucesso")
-            else:
-                logger.warning("❌ Não foi possível preencher o campo 'Confirmar celular destinatario'")
-        except Exception as e:
-            logger.error(f"Erro ao preencher campo 'Confirmar celular destinatario': {str(e)}")
+                break
+            celular_filled = fill_field_by_label(driver, form_modal, [variation], customer_info["phone"])
         
-        # Tirar screenshot após preencher os campos
-        try:
-            driver.save_screenshot("after_simple_form_filled.png")
-            logger.info("Screenshot após preencher formulário simples")
-        except:
-            pass
+        if celular_filled:
+            fields_filled += 1
+            logger.info("✅ Campo 'Confirmar celular destinatario' preenchido com sucesso")
+        else:
+            logger.warning("❌ Não foi possível preencher o campo 'Confirmar celular destinatario'")
         
-        # CORREÇÃO: Remove o clique duplo - só preenche os campos
-        # O clique no botão será feito pela função principal
+        driver.save_screenshot("after_simple_form_filled.png")
+        logger.info("Screenshot após preencher formulário simples")
+        
         logger.info(f"Total de {fields_filled} campos preenchidos no formulário simples")
         
-        # NOVA VERIFICAÇÃO: Aguarda um pouco para garantir que os campos foram preenchidos
-        time.sleep(2)
-        
-        return fields_filled > 0
+        # CRITÉRIO MAIS RIGOROSO: Exige pelo menos 2 campos preenchidos
+        if fields_filled >= 2:
+            logger.info("✅ Formulário considerado preenchido com sucesso (2+ campos)")
+            return True
+        else:
+            logger.warning("❌ Formulário não foi preenchido adequadamente (menos de 2 campos)")
+            return False
             
     except Exception as e:
         logger.error(f"Erro ao processar formulário simples de 3 campos: {str(e)}")
-        logger.error(traceback.format_exc())
         return False
 
 def fill_form_fields(driver, form_modal, customer_info):
@@ -1691,189 +1702,158 @@ def handle_empty_data_error(driver, customer_info):
     return False
 
 def fill_field_by_label(driver, form_modal, label_texts, value):
-    """Preenche um campo específico do formulário identificado por texto da label."""
+    """Preenche um campo específico do formulário identificado por texto da label - VERSÃO CORRIGIDA."""
     try:
         logger.info(f"Tentando preencher campo com labels {label_texts}...")
         
-        # Estratégia aprimorada para campo de solução
         field_found = False
         
-        # NOVA ESTRATÉGIA: Se estamos procurando pelo campo Solución, tente encontrar textareas primeiro
-        if any(sol in label for sol in ["Solución", "Solucion", "solución", "solucion"] for label in label_texts):
-            logger.info("Procurando campos de solução por textarea...")
-            textareas = driver.find_elements(By.TAG_NAME, "textarea")
-            
-            for textarea in textareas:
-                if textarea.is_displayed():
-                    try:
-                        # Destaca para screenshot
-                        original_style = driver.execute_script("return arguments[0].getAttribute('style');", textarea)
-                        driver.execute_script("arguments[0].setAttribute('style', 'border: 3px solid red !important; background: yellow !important;');", textarea)
-                        driver.save_screenshot("solution_textarea_found.png")
-                        driver.execute_script(f"arguments[0].setAttribute('style', '{original_style or ''}');", textarea)
-                        
-                        # Rola para o elemento
-                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", textarea)
-                        time.sleep(1)
-                        
-                        # Limpa e preenche
-                        driver.execute_script("arguments[0].value = '';", textarea)
+        # NOVA ESTRATÉGIA: Busca mais agressiva por campos
+        for label_text in label_texts:
+            if field_found:
+                break
+                
+            # Método 1: Busca por placeholder
+            try:
+                placeholder_inputs = driver.find_elements(By.XPATH, f"//input[contains(@placeholder, '{label_text}') or contains(@placeholder, '{label_text.lower()}')]")
+                for input_field in placeholder_inputs:
+                    if input_field.is_displayed():
+                        logger.info(f"Campo encontrado por placeholder: {label_text}")
+                        # Preenche o campo
+                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", input_field)
+                        time.sleep(0.5)
+                        driver.execute_script("arguments[0].value = '';", input_field)
                         time.sleep(0.5)
                         safe_value = value.replace("'", "\\'").replace("\\", "\\\\")
-                        driver.execute_script(f"arguments[0].value = '{safe_value}';", textarea)
+                        driver.execute_script(f"arguments[0].value = '{safe_value}';", input_field)
                         
                         # Dispara eventos
                         events = ["input", "change", "blur"]
                         for event in events:
-                            driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", textarea)
+                            driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", input_field)
                         
-                        logger.info(f"Textarea preenchida com sucesso: '{value}'")
-                        field_found = True
+                        logger.info(f"Campo '{label_text}' preenchido com sucesso via placeholder")
                         return True
-                    except Exception as e:
-                        logger.warning(f"Erro ao preencher textarea: {e}")
-        
-        # Método 1: Procura por labels exatas
-        for label_text in label_texts:
-            try:
-                labels = form_modal.find_elements(By.XPATH, f"//label[contains(text(), '{label_text}')]")
-                
-                for label in labels:
-                    if label.is_displayed():
-                        logger.info(f"Label encontrada: '{label.text}'")
-                        
-                        # Procura o campo de input associado ao label
-                        input_id = label.get_attribute("for")
-                        if input_id:
-                            try:
-                                input_field = driver.find_element(By.ID, input_id)
-                                if input_field.is_displayed():
-                                    # Rola até o elemento
-                                    driver.execute_script("arguments[0].scrollIntoView(true);", input_field)
-                                    time.sleep(0.5)
-                                    
-                                    # Clica no campo para garantir o foco
-                                    driver.execute_script("arguments[0].click();", input_field)
-                                    
-                                    # CORREÇÃO: Limpa completamente o campo usando JavaScript
-                                    driver.execute_script("arguments[0].value = '';", input_field)
-                                    time.sleep(0.5)
-                                    
-                                    # CORREÇÃO: Preenche usando apenas JavaScript
-                                    safe_value = value.replace("'", "\\'").replace("\\", "\\\\")
-                                    driver.execute_script(f"arguments[0].value = '{safe_value}';", input_field)
-                                    
-                                    # IMPORTANTE: Dispara TODOS os eventos possíveis para garantir que o site reconheça a mudança
-                                    events = ["input", "change", "blur", "keyup", "keydown"]
-                                    for event in events:
-                                        driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", input_field)
-                                    
-                                    # Simula interação de teclado
-                                    from selenium.webdriver.common.keys import Keys
-                                    input_field.send_keys(Keys.TAB)
-                                    
-                                    # Verifica o valor após preenchimento
-                                    actual_value = input_field.get_attribute("value")
-                                    logger.info(f"Campo '{label_text}' preenchido. Valor atual: {actual_value}")
-                                    
-                                    field_found = True
-                                    return True
-                            except Exception as e:
-                                logger.info(f"Erro ao preencher campo '{label_text}': {str(e)}")
             except Exception as e:
-                logger.info(f"Erro ao buscar label '{label_text}': {str(e)}")
-        
-        # Método 2: Encontrar qualquer input visível próximo à label
-        if not field_found:
-            for label_text in label_texts:
-                try:
-                    label_elements = form_modal.find_elements(By.XPATH, f"//*[contains(text(), '{label_text}')]")
-                    for label in label_elements:
-                        if label.is_displayed():
-                            try:
-                                # Busca por inputs próximos ao label
-                                parent = label.find_element(By.XPATH, "./..")
-                                nearby_inputs = parent.find_elements(By.TAG_NAME, "input")
-                                for input_field in nearby_inputs:
-                                    if input_field.is_displayed():
-                                        # Rola até o elemento
-                                        driver.execute_script("arguments[0].scrollIntoView(true);", input_field)
-                                        time.sleep(0.5)
-                                        
-                                        # Clica no campo para garantir o foco
-                                        driver.execute_script("arguments[0].click();", input_field)
-                                        
-                                        # CORREÇÃO: Limpa completamente o campo usando JavaScript
-                                        driver.execute_script("arguments[0].value = '';", input_field)
-                                        time.sleep(0.5)
-                                        
-                                        # CORREÇÃO: Preenche usando apenas JavaScript
-                                        safe_value = value.replace("'", "\\'").replace("\\", "\\\\")
-                                        driver.execute_script(f"arguments[0].value = '{safe_value}';", input_field)
-                                        
-                                        # IMPORTANTE: Dispara TODOS os eventos possíveis para garantir que o site reconheça a mudança
-                                        events = ["input", "change", "blur", "keyup", "keydown"]
-                                        for event in events:
-                                            driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", input_field)
-                                            
-                                        # Simula interação de teclado
-                                        from selenium.webdriver.common.keys import Keys
-                                        input_field.send_keys(Keys.TAB)
-                                        
-                                        # Verifica o valor após preenchimento
-                                        actual_value = input_field.get_attribute("value")
-                                        logger.info(f"Campo próximo a '{label_text}' preenchido. Valor atual: {actual_value}")
-                                        
-                                        field_found = True
-                                        return True
-                            except Exception as e:
-                                logger.info(f"Erro ao preencher campo próximo a '{label_text}': {str(e)}")
-                except Exception as e:
-                    logger.info(f"Erro ao buscar elementos com texto '{label_text}': {str(e)}")
-        
-        # Método adicional: Se for Solución, tenta encontrar qualquer campo editável
-        if not field_found and any(sol in label for sol in ["Solución", "Solucion", "solución", "solucion"] for label in label_texts):
+                logger.info(f"Erro na busca por placeholder '{label_text}': {e}")
+            
+            # Método 2: Busca por name attribute
             try:
-                logger.info("Tentando encontrar qualquer campo editável para Solución...")
-                editable_fields = driver.find_elements(By.XPATH, "//input[@type='text'] | //textarea")
+                name_variations = [
+                    label_text.lower().replace(" ", "").replace("ó", "o").replace("ñ", "n"),
+                    label_text.lower().replace(" ", "_").replace("ó", "o").replace("ñ", "n"),
+                    label_text.lower().replace(" ", "-").replace("ó", "o").replace("ñ", "n")
+                ]
                 
-                for field in editable_fields:
-                    if field.is_displayed():
-                        try:
-                            # Destaca
-                            original_style = driver.execute_script("return arguments[0].getAttribute('style');", field)
-                            driver.execute_script("arguments[0].setAttribute('style', 'border: 3px solid blue !important; background: lightblue !important;');", field)
-                            driver.save_screenshot("solution_field_fallback.png")
-                            driver.execute_script(f"arguments[0].setAttribute('style', '{original_style or ''}');", field)
-                            
-                            # Rola e preenche
-                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", field)
-                            time.sleep(1)
-                            driver.execute_script("arguments[0].value = '';", field)
+                for name_var in name_variations:
+                    name_inputs = driver.find_elements(By.XPATH, f"//input[contains(@name, '{name_var}')]")
+                    for input_field in name_inputs:
+                        if input_field.is_displayed():
+                            logger.info(f"Campo encontrado por name: {name_var}")
+                            # Preenche o campo
+                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", input_field)
+                            time.sleep(0.5)
+                            driver.execute_script("arguments[0].value = '';", input_field)
                             time.sleep(0.5)
                             safe_value = value.replace("'", "\\'").replace("\\", "\\\\")
-                            driver.execute_script(f"arguments[0].value = '{safe_value}';", field)
+                            driver.execute_script(f"arguments[0].value = '{safe_value}';", input_field)
                             
                             # Dispara eventos
                             events = ["input", "change", "blur"]
                             for event in events:
-                                driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", field)
+                                driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", input_field)
                             
-                            logger.info(f"Campo editável preenchido com sucesso como fallback: '{value}'")
-                            field_found = True
+                            logger.info(f"Campo '{label_text}' preenchido com sucesso via name")
                             return True
-                        except Exception as e:
-                            logger.warning(f"Erro ao preencher campo editável: {e}")
             except Exception as e:
-                logger.warning(f"Erro na estratégia fallback: {e}")
+                logger.info(f"Erro na busca por name '{label_text}': {e}")
+            
+            # Método 3: Busca por ID
+            try:
+                id_variations = [
+                    label_text.lower().replace(" ", "").replace("ó", "o").replace("ñ", "n"),
+                    label_text.lower().replace(" ", "_").replace("ó", "o").replace("ñ", "n"),
+                    label_text.lower().replace(" ", "-").replace("ó", "o").replace("ñ", "n")
+                ]
+                
+                for id_var in id_variations:
+                    id_inputs = driver.find_elements(By.XPATH, f"//input[contains(@id, '{id_var}')]")
+                    for input_field in id_inputs:
+                        if input_field.is_displayed():
+                            logger.info(f"Campo encontrado por ID: {id_var}")
+                            # Preenche o campo
+                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", input_field)
+                            time.sleep(0.5)
+                            driver.execute_script("arguments[0].value = '';", input_field)
+                            time.sleep(0.5)
+                            safe_value = value.replace("'", "\\'").replace("\\", "\\\\")
+                            driver.execute_script(f"arguments[0].value = '{safe_value}';", input_field)
+                            
+                            # Dispara eventos
+                            events = ["input", "change", "blur"]
+                            for event in events:
+                                driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", input_field)
+                            
+                            logger.info(f"Campo '{label_text}' preenchido com sucesso via ID")
+                            return True
+            except Exception as e:
+                logger.info(f"Erro na busca por ID '{label_text}': {e}")
         
-        # Se chegou aqui, não encontrou o campo
-        if not field_found:
-            logger.warning(f"Não foi possível encontrar campo com labels {label_texts}")
+        # Resto do código original...
+        logger.warning(f"Não foi possível encontrar campo com labels {label_texts}")
+        return False
+        
+    except Exception as e:
+        logger.error(f"Erro ao preencher campo: {str(e)}")
+        return False
+
+def verify_processing_success(driver, row_id):
+    """Verifica se o processamento foi realmente bem-sucedido."""
+    try:
+        logger.info(f"Verificando sucesso do processamento para novelty {row_id}...")
+        
+        # Aguarda um pouco para garantir que a página atualizou
+        time.sleep(3)
+        
+        # Recarrega a página para garantir dados atualizados
+        driver.refresh()
+        time.sleep(5)
+        
+        # Verifica se ainda está na página de novelties
+        current_url = driver.current_url
+        if "novelties" not in current_url:
+            logger.warning("Não está na página de novelties após processamento")
+            driver.get("https://app.dropi.co/dashboard/novelties")
+            time.sleep(5)
+        
+        # Procura pela novelty específica na tabela atualizada
+        try:
+            # Busca pela linha com o ID específico
+            row_xpath = f"//td[contains(text(), '{row_id}')]/parent::tr"
+            specific_rows = driver.find_elements(By.XPATH, row_xpath)
+            
+            if specific_rows:
+                specific_row = specific_rows[0]
+                
+                # Verifica se ainda há botão "Solve" nesta linha
+                solve_buttons = specific_row.find_elements(By.XPATH, ".//button[contains(text(), 'Solve')]")
+                
+                if not solve_buttons:
+                    logger.info("✅ Processamento confirmado - botão 'Solve' não encontrado")
+                    return True
+                else:
+                    logger.warning("❌ Processamento falhou - botão 'Solve' ainda presente")
+                    return False
+            else:
+                logger.warning("❌ Não foi possível encontrar a linha específica na tabela")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Erro ao verificar linha específica: {e}")
             return False
             
     except Exception as e:
-        logger.error(f"Erro ao preencher campo: {str(e)}")
+        logger.error(f"Erro ao verificar sucesso do processamento: {e}")
         return False
 
 def process_current_novelty():
@@ -2561,11 +2541,19 @@ def process_current_novelty():
                 logger.warning(f"Erro na verificação final: {final_check_error}")
             
             # Incrementa contador de sucesso
-            st.session_state.success_count += 1
-            logger.info(f"Novelty {row_id} processada com sucesso!")
+            logger.info("Executando verificação final de sucesso...")
+            processing_successful = verify_processing_success(driver, row_id)
+            
+            if processing_successful:
+                st.session_state.success_count += 1
+                logger.info(f"✅ Novelty {row_id} processada com SUCESSO CONFIRMADO!")
+            else:
+                st.session_state.failed_items.append({"id": row_id, "error": "Verificação de sucesso falhou - botão Solve ainda presente"})
+                st.session_state.failed_count = len(st.session_state.failed_items)
+                logger.warning(f"❌ Novelty {row_id} processamento FALHOU na verificação final!")
             
             # Pequena pausa entre processamentos
-            time.sleep(2)  # Aumentado de 1 para 2 segundos
+            time.sleep(3)
             
         except Exception as e:
             # Registra o erro
