@@ -1766,34 +1766,39 @@ def check_novelty_actually_processed(driver, row_id):
         return True
 
 def handle_ups_error_better(driver, row_id):
-    """Lida melhor com o erro 'Ups, tenemos el siguiente inconveniente'."""
+    """Lida com erro 'Ups' de forma mais rápida e eficiente."""
     try:
-        logger.info("Tratando erro 'Ups, tenemos el siguiente inconveniente' de forma inteligente...")
+        logger.info("Tratando erro 'Ups' rapidamente...")
         
-        # Aguarda um pouco
-        time.sleep(3)
+        # Aguarda menos tempo - 1 segundo em vez de 3
+        time.sleep(1)
         
-        # Tenta fechar qualquer modal de erro
-        close_buttons = driver.find_elements(By.XPATH, "//button[contains(@class, 'btn-close') or contains(@class, 'close')]")
-        for btn in close_buttons:
-            if btn.is_displayed():
-                driver.execute_script("arguments[0].click();", btn)
-                time.sleep(1)
+        # Fecha modais/popups rapidamente
+        try:
+            # Método 1: ESC key para fechar qualquer modal
+            from selenium.webdriver.common.keys import Keys
+            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+            time.sleep(0.5)
+        except:
+            pass
         
-        # Tenta clicar em "OK" se houver
-        ok_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'OK') or contains(text(), 'Ok') or contains(text(), 'Aceptar')]")
-        for btn in ok_buttons:
-            if btn.is_displayed():
-                driver.execute_script("arguments[0].click();", btn)
-                time.sleep(1)
+        # Método 2: Clica em botões de fechar
+        try:
+            close_buttons = driver.find_elements(By.XPATH, "//button[contains(@class, 'btn-close') or contains(@class, 'close') or contains(text(), 'OK')]")
+            for btn in close_buttons[:2]:  # Máximo 2 botões
+                if btn.is_displayed():
+                    driver.execute_script("arguments[0].click();", btn)
+                    time.sleep(0.5)
+        except:
+            pass
         
-        # Navega diretamente para novelties
-        logger.info("Navegando para novelties após erro...")
+        # Navega diretamente para novelties sem esperar muito
+        logger.info("Redirecionando rapidamente para novelties...")
         driver.get("https://app.dropi.co/dashboard/novelties")
-        time.sleep(8)
+        time.sleep(3)  # Reduzido de 10 para 3 segundos
         
-        # Registra como falha e continua
-        logger.warning(f"Novelty {row_id} falhou devido ao erro do sistema")
+        # Registra como falha do sistema, não da automação
+        logger.warning(f"Novelty {row_id} falhou devido ao erro interno do sistema Dropi")
         return False
         
     except Exception as e:
