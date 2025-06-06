@@ -1353,404 +1353,266 @@ def handle_simple_three_field_form(driver, form_modal, customer_info):
         return False
 
 def fill_form_fields(driver, form_modal, customer_info):
-    """Preenche os campos do formulário com as informações do cliente."""
+    """Preenche os campos do formulário com as informações do cliente - VERSÃO CORRIGIDA."""
     try:
-        logger.info("Analisando tipo de formulário...")
+        logger.info("=== INICIANDO PREENCHIMENTO DE FORMULÁRIO ===")
         
-        # NOVA VERIFICAÇÃO: Detecta formulário simples de 3 campos
-        simple_form_exists = False
+        # PASSO 1: Aguarda mais tempo para garantir carregamento completo
+        logger.info("Aguardando 10 segundos para carregamento completo do formulário...")
+        time.sleep(10)
+        
+        # PASSO 2: Verifica se há iframes e alterna para eles
         try:
-            # Verifica se tem os 3 campos específicos do novo formato
-            simple_field_indicators = [
-                "Solución",
-                "Confirmar dirección destinatario", 
-                "Confirmar celular destinatario"
-            ]
+            logger.info("Verificando se há iframes na página...")
+            iframes = driver.find_elements(By.TAG_NAME, "iframe")
+            logger.info(f"Encontrados {len(iframes)} iframes")
             
-            fields_found = 0
-            for field_name in simple_field_indicators:
-                # Busca por labels ou placeholders com esses textos
-                elements = driver.find_elements(By.XPATH, f"//*[contains(text(), '{field_name}') or contains(@placeholder, '{field_name}')]")
-                if elements:
-                    fields_found += 1
-                    logger.info(f"Campo encontrado: {field_name}")
-            
-            # Se encontrou pelo menos 2 dos 3 campos específicos, é o formato simples
-            if fields_found >= 2:
-                simple_form_exists = True
-                logger.info("Detectado formulário simples de 3 campos")
-                
-            # Verifica também pela presença do botão "SAVE SOLUTION"
-            if not simple_form_exists:
-                save_solution_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'SAVE SOLUTION')]")
-                if save_solution_buttons:
-                    simple_form_exists = True
-                    logger.info("Detectado formulário simples pela presença do botão 'SAVE SOLUTION'")
-                    
-        except Exception as e:
-            logger.info(f"Erro ao verificar formulário simples: {str(e)}")
-        
-        # Se detectou o formulário simples, usa a função especializada
-        if simple_form_exists:
-            logger.info("Usando tratamento para formulário simples de 3 campos")
-            return handle_simple_three_field_form(driver, form_modal, customer_info)
-        
-        # Verifica se existe um select de Solución (detecção mais precisa)
-        dropdown_exists = False
-        try:
-            # Busca específica pelo elemento select
-            select_elements = []
-            
-            # Tenta encontrar o select explicitamente relacionado à Solución
-            select_elements = driver.find_elements(By.XPATH, "//div[contains(text(), 'Solución')]/select")
-            
-            if not select_elements:
-                select_elements = driver.find_elements(By.XPATH, "//div[contains(@class, 'form-group')][contains(text(), 'Solución')]//select")
-            
-            # Se encontrou algum select, verifica se tem a opção específica "Entregar en nueva dirección"
-            if select_elements:
-                for select_element in select_elements:
-                    if select_element.is_displayed():
-                        # Verifica se tem a opção específica
-                        try:
-                            options = select_element.find_elements(By.TAG_NAME, "option")
-                            for option in options:
-                                if "entregar en nueva dirección" in option.text.lower():
-                                    dropdown_exists = True
-                                    logger.info("Detectado formulário com dropdown para Solución e opção 'Entregar en nueva dirección'")
-                                    break
-                            if dropdown_exists:
-                                break
-                        except:
-                            # Se não conseguir verificar as opções, ainda pode ser um dropdown
-                            pass
-            
-            # Se não encontrou pelo select com opções, faz uma verificação de fallback
-            if not dropdown_exists:
-                # Verifica especificamente pela estrutura HTML que você compartilhou
-                form_html = form_modal.get_attribute("innerHTML").lower()
-                if "select" in form_html and "solución" in form_html and "entregar en nueva dirección" in form_html:
-                    dropdown_exists = True
-                    logger.info("Detectado formulário com dropdown de Solución via HTML interno")
-        except Exception as e:
-            logger.info(f"Erro ao verificar tipo de formulário: {str(e)}")
-        
-        # Se detectou que é o formato com dropdown, usa a função especializada
-        if dropdown_exists:
-            logger.info("Detectado formulário com dropdown de Solución. Usando tratamento especializado.")
-            return handle_dropdown_solution_form(driver, form_modal, customer_info)
-        
-        # Caso contrário, continua com o fluxo normal
-        logger.info("Usando fluxo normal de preenchimento de formulário...")
-        fields_filled = 0
-        
-        # Caso contrário, continua com o fluxo normal
-        logger.info("Usando fluxo normal de preenchimento de formulário...")
-        fields_filled = 0
-        
-        # Resto do código original para preencher formulários padrão
-        # Primeiro vamos encontrar todos os campos do formulário para entender o que precisa ser preenchido
-        form_fields = []
-        try:
-            # Tirar screenshot do formulário para análise
-            driver.save_screenshot("form_before_filling.png")
-            logger.info("Screenshot do formulário antes de preencher salvo")
-            
-            # Encontra todas as labels visíveis no formulário
-            labels = form_modal.find_elements(By.TAG_NAME, "label")
-            visible_labels = [label for label in labels if label.is_displayed()]
-            
-            logger.info(f"Total de {len(visible_labels)} labels visíveis encontradas no formulário")
-            
-            # Lista todas as labels encontradas no log
-            for idx, label in enumerate(visible_labels):
-                label_text = label.text.strip()
-                label_for = label.get_attribute("for")
-                logger.info(f"Label #{idx}: Texto='{label_text}', For='{label_for}'")
-                
-                # Verifica se há um campo associado
-                if label_for:
-                    try:
-                        input_field = driver.find_element(By.ID, label_for)
-                        if input_field.is_displayed():
-                            field_type = input_field.get_attribute("type")
-                            field_value = input_field.get_attribute("value")
-                            field_required = input_field.get_attribute("required")
-                            
-                            form_fields.append({
-                                "label": label_text,
-                                "field": input_field,
-                                "type": field_type,
-                                "value": field_value,
-                                "required": field_required == "true" or field_required == ""
-                            })
-                            
-                            logger.info(f"Campo associado encontrado: Tipo='{field_type}', Valor='{field_value}', Obrigatório={field_required}")
-                    except:
-                        logger.info(f"Não foi possível encontrar campo para label '{label_text}'")
-            
-            # Se não encontrou campos por labels, tenta encontrar todos os inputs
-            if not form_fields:
-                logger.info("Tentando encontrar todos os campos de input visíveis...")
-                inputs = form_modal.find_elements(By.TAG_NAME, "input")
-                visible_inputs = [inp for inp in inputs if inp.is_displayed()]
-                
-                logger.info(f"Total de {len(visible_inputs)} inputs visíveis encontrados")
-                
-                for idx, input_field in enumerate(visible_inputs):
-                    field_id = input_field.get_attribute("id")
-                    field_name = input_field.get_attribute("name")
-                    field_placeholder = input_field.get_attribute("placeholder")
-                    field_type = input_field.get_attribute("type")
-                    field_value = input_field.get_attribute("value")
-                    field_required = input_field.get_attribute("required")
-                    
-                    # IMPORTANTE: Ignorar o campo de pesquisa
-                    if field_name == "textToSearch" or field_placeholder == "Search":
-                        logger.info(f"Ignorando campo de pesquisa: ID='{field_id}', Nome='{field_name}', Placeholder='{field_placeholder}'")
-                        continue
-                    
-                    # Tenta determinar a label pelo contexto
-                    label_text = field_placeholder or field_name or field_id or f"Campo #{idx}"
-                    
-                    form_fields.append({
-                        "label": label_text,
-                        "field": input_field,
-                        "type": field_type,
-                        "value": field_value,
-                        "required": field_required == "true" or field_required == ""
-                    })
-                    
-                    logger.info(f"Input #{idx}: ID='{field_id}', Nome='{field_name}', Placeholder='{field_placeholder}', " +
-                               f"Tipo='{field_type}', Valor='{field_value}', Obrigatório={field_required}")
-        except Exception as e:
-            logger.error(f"Erro ao analisar campos do formulário: {str(e)}")
-        
-        # Conta o número total de campos visíveis para determinar o padrão (Colômbia vs Equador)
-        visible_input_count = len([f for f in form_fields if f["field"].is_displayed()])
-        logger.info(f"Total de {visible_input_count} campos de input visíveis detectados")
-        
-        # 1. Preenche o campo Solución (sempre deve ser preenchido, independente do padrão)
-        solucion_filled = fill_field_by_label(driver, form_modal, 
-                                              ["Solución", "Solucion", "solución", "solucion", "Solution"], 
-                                              customer_info["address"])
-        if solucion_filled:
-            fields_filled += 1
-            logger.info("✅ Campo Solución preenchido com sucesso")
-        else:
-            logger.warning("❌ Não foi possível preencher o campo Solución")
-        
-        # Se há mais de um campo, preenche os outros campos (comportamento padrão do Equador)
-        if visible_input_count > 1:
-            logger.info("Detectados múltiplos campos - usando o padrão completo de preenchimento")
-            
-            # 2. Preenche o campo Nombre
-            nombre_filled = fill_field_by_label(driver, form_modal, 
-                                               ["Nombre", "Nome", "Name"], 
-                                               customer_info["name"])
-            if nombre_filled:
-                fields_filled += 1
-                logger.info("✅ Campo Nombre preenchido com sucesso")
-            else:
-                logger.warning("❌ Não foi possível preencher o campo Nombre")
-                
-                # Tenta encontrar e preencher o campo pelo ID ou classe
-                try:
-                    nombre_inputs = form_modal.find_elements(By.XPATH, "//input[contains(@id, 'nombre') or contains(@id, 'name') or contains(@name, 'nombre') or contains(@name, 'name')]")
-                    if nombre_inputs:
-                        nombre_input = nombre_inputs[0]
-                        if nombre_input.is_displayed():
-                            # Limpa e preenche
-                            driver.execute_script("arguments[0].value = '';", nombre_input)
-                            time.sleep(0.5)
-                            driver.execute_script(f"arguments[0].value = '{customer_info['name']}';", nombre_input)
-                            # Dispara eventos para garantir que o site registre a alteração
-                            driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", nombre_input)
-                            driver.execute_script("arguments[0].dispatchEvent(new Event('input'));", nombre_input)
-                            logger.info("✅ Campo Nombre preenchido via seletor alternativo")
-                            fields_filled += 1
-                            nombre_filled = True
-                except Exception as e:
-                    logger.info(f"Erro ao tentar método alternativo para Nombre: {str(e)}")
-            
-            # 3. Preenche o campo Dirección entrega
-            direccion_filled = fill_field_by_label(driver, form_modal, 
-                                                  ["Dirección entrega", "Direccion entrega", "Direção entrega", 
-                                                   "Dirección de entrega", "Direccion de entrega", "Delivery address"], 
-                                                  customer_info["address"])
-            if direccion_filled:
-                fields_filled += 1
-                logger.info("✅ Campo Dirección entrega preenchido com sucesso")
-            else:
-                logger.warning("❌ Não foi possível preencher o campo Dirección entrega")
-                
-                # Tenta encontrar e preencher o campo pelo ID ou classe
-                try:
-                    direccion_inputs = form_modal.find_elements(By.XPATH, "//input[contains(@id, 'direccion') or contains(@id, 'address') or contains(@name, 'direccion') or contains(@name, 'address')]")
-                    if direccion_inputs:
-                        direccion_input = direccion_inputs[0]
-                        if direccion_input.is_displayed():
-                            # Limpa e preenche
-                            driver.execute_script("arguments[0].value = '';", direccion_input)
-                            time.sleep(0.5)
-                            driver.execute_script(f"arguments[0].value = '{customer_info['address']}';", direccion_input)
-                            # Dispara eventos para garantir que o site registre a alteração
-                            driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", direccion_input)
-                            driver.execute_script("arguments[0].dispatchEvent(new Event('input'));", direccion_input)
-                            logger.info("✅ Campo Dirección preenchido via seletor alternativo")
-                            fields_filled += 1
-                            direccion_filled = True
-                except Exception as e:
-                    logger.info(f"Erro ao tentar método alternativo para Dirección: {str(e)}")
-            
-            # 4. Preenche o campo Celular
-            celular_filled = fill_field_by_label(driver, form_modal, 
-                                                ["Celular", "Teléfono", "Telefono", "Phone"], 
-                                                customer_info["phone"])
-            if celular_filled:
-                fields_filled += 1
-                logger.info("✅ Campo Celular preenchido com sucesso")
-            else:
-                logger.warning("❌ Não foi possível preencher o campo Celular")
-                
-                # Tenta encontrar e preencher o campo pelo ID ou classe
-                try:
-                    celular_inputs = form_modal.find_elements(By.XPATH, "//input[contains(@id, 'celular') or contains(@id, 'phone') or contains(@id, 'telefono') or contains(@name, 'celular') or contains(@name, 'phone') or contains(@name, 'telefono')]")
-                    if celular_inputs:
-                        celular_input = celular_inputs[0]
-                        if celular_input.is_displayed():
-                            # Limpa e preenche
-                            driver.execute_script("arguments[0].value = '';", celular_input)
-                            time.sleep(0.5)
-                            driver.execute_script(f"arguments[0].value = '{customer_info['phone']}';", celular_input)
-                            # Dispara eventos para garantir que o site registre a alteração
-                            driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", celular_input)
-                            driver.execute_script("arguments[0].dispatchEvent(new Event('input'));", celular_input)
-                            logger.info("✅ Campo Celular preenchido via seletor alternativo")
-                            fields_filled += 1
-                            celular_filled = True
-                except Exception as e:
-                    logger.info(f"Erro ao tentar método alternativo para Celular: {str(e)}")
-        else:
-            logger.info("Detectado apenas um campo - usando o padrão simplificado da Colômbia")
-            # No padrão da Colômbia com apenas um campo, já preenchemos o Solución acima
-        
-        # 5. Tenta preencher todos os campos obrigatórios vazios
-        try:
-            logger.info("Verificando se há campos obrigatórios não preenchidos...")
-            
-            # Encontra todos os campos marcados como obrigatórios
-            required_inputs = form_modal.find_elements(By.XPATH, "//input[@required]")
-            
-            logger.info(f"Encontrados {len(required_inputs)} campos obrigatórios")
-            
-            for idx, input_field in enumerate(required_inputs):
-                if input_field.is_displayed():
-                    field_value = input_field.get_attribute("value")
-                    field_id = input_field.get_attribute("id") or ""
-                    field_name = input_field.get_attribute("name") or ""
-                    field_type = input_field.get_attribute("type") or ""
-                    field_placeholder = input_field.get_attribute("placeholder") or ""
-                    
-                    # IMPORTANTE: Ignorar o campo de pesquisa
-                    if field_name == "textToSearch" or field_placeholder == "Search":
-                        logger.info(f"Ignorando campo de pesquisa obrigatório: ID='{field_id}', Nome='{field_name}'")
-                        continue
-                    
-                    logger.info(f"Campo obrigatório #{idx}: ID='{field_id}', Nome='{field_name}', Tipo='{field_type}', Valor Atual='{field_value}'")
-                    
-                    # Se o campo está vazio, tenta preenchê-lo com um valor relevante
-                    if not field_value:
-                        # Determina o melhor valor com base nos atributos do campo
-                        value_to_use = ""
+            if iframes:
+                for i, iframe in enumerate(iframes):
+                    if iframe.is_displayed():
+                        logger.info(f"Alternando para iframe {i}")
+                        driver.switch_to.frame(iframe)
                         
-                        if "nombre" in field_id.lower() or "nome" in field_id.lower() or "name" in field_id.lower() or \
-                           "nombre" in field_name.lower() or "nome" in field_name.lower() or "name" in field_name.lower():
-                            value_to_use = customer_info["name"]
-                        elif "direccion" in field_id.lower() or "endereco" in field_id.lower() or "address" in field_id.lower() or \
-                             "direccion" in field_name.lower() or "endereco" in field_name.lower() or "address" in field_name.lower():
-                            value_to_use = customer_info["address"]
-                        elif "celular" in field_id.lower() or "telefono" in field_id.lower() or "phone" in field_id.lower() or \
-                             "celular" in field_name.lower() or "telefono" in field_name.lower() or "phone" in field_name.lower():
-                            value_to_use = customer_info["phone"]
-                        elif "solucion" in field_id.lower() or "solution" in field_id.lower() or \
-                             "solucion" in field_name.lower() or "solution" in field_name.lower():
-                            value_to_use = customer_info["address"]
+                        # Verifica se há formulários no iframe
+                        iframe_forms = driver.find_elements(By.TAG_NAME, "form")
+                        iframe_inputs = driver.find_elements(By.XPATH, "//input[@type='text'] | //textarea")
+                        
+                        if iframe_forms or iframe_inputs:
+                            logger.info(f"Formulário encontrado no iframe {i}")
+                            form_modal = driver.find_element(By.TAG_NAME, "body")
+                            break
                         else:
-                            # Se não conseguimos determinar, usa o nome para campos de texto
-                            if field_type.lower() in ["text", "email", "tel", "url", ""]:
-                                value_to_use = customer_info["name"]
-                        
-                        if value_to_use:
-                            # Limpa e preenche
-                            driver.execute_script("arguments[0].value = '';", input_field)
-                            time.sleep(0.5)
-                            driver.execute_script(f"arguments[0].value = '{value_to_use}';", input_field)
-                            # Dispara eventos
-                            driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", input_field)
-                            driver.execute_script("arguments[0].dispatchEvent(new Event('input'));", input_field)
-                            logger.info(f"Preenchido campo obrigatório #{idx} com '{value_to_use}'")
-                            fields_filled += 1
+                            driver.switch_to.default_content()
         except Exception as e:
-            logger.error(f"Erro ao verificar campos obrigatórios: {str(e)}")
+            logger.info(f"Erro ao verificar iframes: {e}")
+            driver.switch_to.default_content()
         
-        # Tirar screenshot após preencher todos os campos
+        # PASSO 3: Aguarda elementos específicos aparecerem
+        logger.info("Aguardando elementos do formulário...")
         try:
-            driver.save_screenshot("form_after_filling.png")
-            logger.info("Screenshot do formulário após preenchimento salvo")
+            # Aguarda por textarea ou inputs de texto
+            WebDriverWait(driver, 15).until(
+                lambda d: len(d.find_elements(By.XPATH, "//textarea | //input[@type='text']")) > 0
+            )
+            logger.info("Elementos do formulário detectados")
+        except:
+            logger.warning("Timeout aguardando elementos do formulário")
+        
+        # PASSO 4: Diagnóstico completo da página
+        logger.info("=== DIAGNÓSTICO DA PÁGINA ===")
+        
+        # Tira screenshot para análise
+        driver.save_screenshot("diagnostic_full_page.png")
+        
+        # Verifica conteúdo da página
+        page_source_snippet = driver.page_source[:1000]
+        logger.info(f"Snippet do HTML da página: {page_source_snippet}")
+        
+        # Lista todos os elementos interativos
+        all_inputs = driver.find_elements(By.XPATH, "//input | //textarea | //select")
+        visible_inputs = [inp for inp in all_inputs if inp.is_displayed() and inp.is_enabled()]
+        
+        logger.info(f"=== ELEMENTOS ENCONTRADOS ===")
+        logger.info(f"Total de inputs/textareas/selects: {len(all_inputs)}")
+        logger.info(f"Elementos visíveis e habilitados: {len(visible_inputs)}")
+        
+        for i, element in enumerate(visible_inputs):
+            try:
+                tag = element.tag_name
+                type_attr = element.get_attribute("type") or "N/A"
+                id_attr = element.get_attribute("id") or "N/A"
+                name_attr = element.get_attribute("name") or "N/A"
+                placeholder = element.get_attribute("placeholder") or "N/A"
+                value = element.get_attribute("value") or "N/A"
+                class_attr = element.get_attribute("class") or "N/A"
+                
+                logger.info(f"Elemento {i}: {tag}[type={type_attr}] ID={id_attr} Name={name_attr} Placeholder={placeholder} Value={value} Class={class_attr}")
+            except Exception as e:
+                logger.info(f"Erro ao analisar elemento {i}: {e}")
+        
+        # PASSO 5: Estratégia de preenchimento por prioridades
+        fields_filled = 0
+        
+        # ESTRATÉGIA 1: Preenche TEXTAREA primeiro (geralmente é o campo Solución)
+        logger.info("=== ESTRATÉGIA 1: PREENCHENDO TEXTAREAS ===")
+        textareas = driver.find_elements(By.TAG_NAME, "textarea")
+        for i, textarea in enumerate(textareas):
+            if textarea.is_displayed() and textarea.is_enabled():
+                try:
+                    logger.info(f"Preenchendo textarea {i}...")
+                    
+                    # Clica no elemento para focar
+                    driver.execute_script("arguments[0].click();", textarea)
+                    time.sleep(1)
+                    
+                    # Limpa o campo
+                    driver.execute_script("arguments[0].value = '';", textarea)
+                    time.sleep(1)
+                    
+                    # Preenche com endereço
+                    safe_address = customer_info["address"].replace("'", "\\'").replace('"', '\\"').replace('\n', ' ')
+                    driver.execute_script(f"arguments[0].value = '{safe_address}';", textarea)
+                    
+                    # Dispara eventos
+                    for event in ["input", "change", "blur", "keyup"]:
+                        driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", textarea)
+                    
+                    # Verifica se o valor foi aceito
+                    new_value = textarea.get_attribute("value")
+                    if new_value and len(new_value) > 5:
+                        logger.info(f"✅ Textarea {i} preenchida com sucesso: {new_value[:50]}...")
+                        fields_filled += 1
+                    else:
+                        logger.warning(f"❌ Textarea {i} não aceitou o valor")
+                        
+                except Exception as e:
+                    logger.warning(f"Erro ao preencher textarea {i}: {e}")
+        
+        # ESTRATÉGIA 2: Preenche campos de input de texto
+        logger.info("=== ESTRATÉGIA 2: PREENCHENDO INPUTS DE TEXTO ===")
+        text_inputs = driver.find_elements(By.XPATH, "//input[@type='text'] | //input[not(@type)]")
+        
+        for i, input_field in enumerate(text_inputs):
+            if input_field.is_displayed() and input_field.is_enabled():
+                try:
+                    # Ignora campos de pesquisa
+                    name = input_field.get_attribute("name") or ""
+                    placeholder = input_field.get_attribute("placeholder") or ""
+                    id_attr = input_field.get_attribute("id") or ""
+                    
+                    if any(term in (name + placeholder + id_attr).lower() for term in ["search", "textosearch", "buscar"]):
+                        logger.info(f"Ignorando campo de pesquisa {i}")
+                        continue
+                    
+                    # Determina qual valor usar baseado no contexto
+                    value_to_use = customer_info["address"]  # padrão
+                    
+                    combined_attrs = (name + placeholder + id_attr).lower()
+                    if any(term in combined_attrs for term in ["nombre", "name", "nom"]):
+                        value_to_use = customer_info["name"]
+                    elif any(term in combined_attrs for term in ["telefono", "celular", "phone", "tel"]):
+                        value_to_use = customer_info["phone"]
+                    elif any(term in combined_attrs for term in ["direccion", "address", "endereco"]):
+                        value_to_use = customer_info["address"]
+                    
+                    logger.info(f"Preenchendo input {i} com: {value_to_use[:30]}...")
+                    
+                    # Clica no elemento para focar
+                    driver.execute_script("arguments[0].click();", input_field)
+                    time.sleep(1)
+                    
+                    # Limpa o campo
+                    driver.execute_script("arguments[0].value = '';", input_field)
+                    time.sleep(1)
+                    
+                    # Preenche
+                    safe_value = value_to_use.replace("'", "\\'").replace('"', '\\"').replace('\n', ' ')
+                    driver.execute_script(f"arguments[0].value = '{safe_value}';", input_field)
+                    
+                    # Dispara eventos
+                    for event in ["input", "change", "blur", "keyup"]:
+                        driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", input_field)
+                    
+                    # Verifica se o valor foi aceito
+                    new_value = input_field.get_attribute("value")
+                    if new_value and len(new_value) > 2:
+                        logger.info(f"✅ Input {i} preenchido com sucesso: {new_value[:30]}...")
+                        fields_filled += 1
+                    else:
+                        logger.warning(f"❌ Input {i} não aceitou o valor")
+                        
+                except Exception as e:
+                    logger.warning(f"Erro ao preencher input {i}: {e}")
+        
+        # ESTRATÉGIA 3: Verifica e preenche selects (dropdowns)
+        logger.info("=== ESTRATÉGIA 3: VERIFICANDO SELECTS (DROPDOWNS) ===")
+        selects = driver.find_elements(By.TAG_NAME, "select")
+        
+        for i, select_element in enumerate(selects):
+            if select_element.is_displayed() and select_element.is_enabled():
+                try:
+                    from selenium.webdriver.support.ui import Select
+                    select = Select(select_element)
+                    options = [opt.text.strip() for opt in select.options]
+                    
+                    logger.info(f"Select {i} tem {len(options)} opções: {options}")
+                    
+                    # Procura por opção relacionada a entrega
+                    for option_text in options:
+                        if any(term in option_text.lower() for term in ["entrega", "entregar", "nueva", "direccion", "delivery"]):
+                            logger.info(f"Selecionando opção: {option_text}")
+                            select.select_by_visible_text(option_text)
+                            fields_filled += 1
+                            time.sleep(2)
+                            break
+                    
+                except Exception as e:
+                    logger.warning(f"Erro ao processar select {i}: {e}")
+        
+        # PASSO 6: Aguarda processamento e tira screenshot final
+        time.sleep(3)
+        driver.save_screenshot("form_filled_final.png")
+        
+        # PASSO 7: Verifica campos obrigatórios vazios
+        logger.info("=== VERIFICAÇÃO FINAL ===")
+        empty_required = []
+        required_elements = driver.find_elements(By.XPATH, "//input[@required] | //textarea[@required] | //select[@required]")
+        
+        for element in required_elements:
+            if element.is_displayed():
+                value = element.get_attribute("value") or ""
+                if not value.strip():
+                    empty_required.append(element)
+        
+        if empty_required:
+            logger.warning(f"{len(empty_required)} campos obrigatórios ainda vazios")
+            # Tenta preencher com endereço
+            for element in empty_required:
+                try:
+                    driver.execute_script("arguments[0].click();", element)
+                    time.sleep(0.5)
+                    driver.execute_script("arguments[0].value = '';", element)
+                    time.sleep(0.5)
+                    safe_address = customer_info["address"].replace("'", "\\'").replace('"', '\\"').replace('\n', ' ')
+                    driver.execute_script(f"arguments[0].value = '{safe_address}';", element)
+                    
+                    for event in ["input", "change", "blur"]:
+                        driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", element)
+                    
+                    fields_filled += 1
+                    logger.info("Campo obrigatório preenchido com endereço")
+                except Exception as e:
+                    logger.warning(f"Erro ao preencher campo obrigatório: {e}")
+        else:
+            logger.info("✅ Todos os campos obrigatórios estão preenchidos")
+        
+        # Volta para o conteúdo principal se estava em iframe
+        try:
+            driver.switch_to.default_content()
         except:
             pass
         
-        # 7. Verifica se todos os campos foram preenchidos
-        try:
-            logger.info("Verificando preenchimento final dos campos...")
-            
-            empty_required_fields = []
-            
-            # Verifica todos os inputs
-            all_inputs = form_modal.find_elements(By.TAG_NAME, "input")
-            for input_field in all_inputs:
-                if input_field.is_displayed():
-                    field_id = input_field.get_attribute("id") or ""
-                    field_name = input_field.get_attribute("name") or ""
-                    field_value = input_field.get_attribute("value")
-                    field_required = input_field.get_attribute("required") == "true" or input_field.get_attribute("required") == ""
-                    field_type = input_field.get_attribute("type") or ""
-                    field_placeholder = input_field.get_attribute("placeholder") or ""
-                    
-                    # IMPORTANTE: Ignorar o campo de pesquisa
-                    if field_name == "textToSearch" or field_placeholder == "Search":
-                        logger.info(f"Ignorando campo de pesquisa na verificação final: ID='{field_id}', Nome='{field_name}'")
-                        continue
-                    
-                    # Ignora campos ocultos, checkbox, radio
-                    if field_type.lower() not in ["hidden", "checkbox", "radio"]:
-                        if field_required and not field_value:
-                            empty_required_fields.append({
-                                "id": field_id,
-                                "name": field_name,
-                                "type": field_type
-                            })
-            
-            if empty_required_fields:
-                logger.warning(f"Ainda existem {len(empty_required_fields)} campos obrigatórios vazios:")
-                for field in empty_required_fields:
-                    logger.warning(f"Campo vazio: ID='{field['id']}', Nome='{field['name']}', Tipo='{field['type']}'")
-            else:
-                logger.info("Todos os campos obrigatórios estão preenchidos!")
-        except Exception as e:
-            logger.error(f"Erro ao verificar preenchimento final: {str(e)}")
+        logger.info(f"=== RESULTADO FINAL: {fields_filled} campos preenchidos ===")
         
-        logger.info(f"Total de {fields_filled} campos preenchidos no formulário")
-        
-        # NOVA VERIFICAÇÃO: Se não preencheu nenhum campo, tentar excluir o formulário
-        if fields_filled == 0:
-            logger.warning("Nenhum campo foi preenchido, tentando excluir o formulário...")
-            return click_no_yes_buttons(driver)
-            
+        # Considera sucesso se preencheu pelo menos 1 campo
         return fields_filled > 0
+        
     except Exception as e:
-        logger.error(f"Erro ao preencher campos do formulário: {str(e)}")
+        logger.error(f"Erro crítico no preenchimento de formulário: {str(e)}")
+        logger.error(traceback.format_exc())
+        
+        # Volta para o conteúdo principal em caso de erro
+        try:
+            driver.switch_to.default_content()
+        except:
+            pass
+            
+        # Tira screenshot do erro
+        try:
+            driver.save_screenshot("form_filling_error.png")
+        except:
+            pass
+            
         return False
     
 def handle_empty_data_error(driver, customer_info):
@@ -2074,7 +1936,7 @@ def handle_ups_error_better(driver, row_id):
         return False
 
 def process_current_novelty():
-    """Processa a novelty atual na lista."""
+    """Processa a novelty atual na lista - VERSÃO CORRIGIDA."""
     try:
         driver = st.session_state.driver
         
@@ -2126,8 +1988,8 @@ def process_current_novelty():
                     driver.get("https://app.dropi.co/dashboard/novelties")
                     
                     # Aumenta o tempo de espera após recarregar
-                    logger.info("Aguardando 10 segundos para carregamento completo da página...")
-                    time.sleep(10)
+                    logger.info("Aguardando 15 segundos para carregamento completo da página...")
+                    time.sleep(15)
                     
                     # Tenta configurar a exibição de 1000 entradas novamente
                     try:
@@ -2180,6 +2042,10 @@ def process_current_novelty():
         st.session_state.progress = (st.session_state.current_row_index + 1) / st.session_state.total_items
         
         try:
+            # AGUARDAR MAIS TEMPO para garantir que a página está estável
+            logger.info("Aguardando 5 segundos antes de iniciar processamento...")
+            time.sleep(5)
+            
             # Tirar screenshot antes de clicar no botão Save
             try:
                 driver.save_screenshot(f"before_save_{row_id}.png")
@@ -2208,7 +2074,7 @@ def process_current_novelty():
                     
                     # Se não encontrou por classe, tenta por texto
                     if not save_buttons:
-                        save_buttons = current_row.find_elements(By.XPATH, ".//button[contains(text(), 'Save')]")
+                        save_buttons = current_row.find_elements(By.XPATH, ".//button[contains(text(), 'Save') or contains(text(), 'Solve')]")
                     
                     # Se ainda não encontrou, tenta qualquer botão na linha
                     if not save_buttons:
@@ -2219,14 +2085,14 @@ def process_current_novelty():
                         
                         # Rola até o botão para garantir que esteja visível
                         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", save_button)
-                        time.sleep(2)  # Aumentado para 2 segundos
+                        time.sleep(3)  # Aumentado para 3 segundos
                         
                         # Tenta clicar com JavaScript para maior confiabilidade
                         driver.execute_script("arguments[0].click();", save_button)
                         logger.info("Botão 'Save' clicado via JavaScript")
                         
                         # NOVA VERIFICAÇÃO: Verificar se a janela ainda existe após clicar
-                        time.sleep(2)
+                        time.sleep(3)
                         try:
                             # Tenta acessar o título atual para verificar se a janela existe
                             current_title = driver.title
@@ -2281,9 +2147,9 @@ def process_current_novelty():
                 st.session_state.current_row_index += 1
                 return False
             
-            # Espera pelo popup - tempo aumentado
-            logger.info("Aguardando 5 segundos pelo popup...")
-            time.sleep(5)
+            # Espera pelo popup - tempo MUITO aumentado
+            logger.info("Aguardando 8 segundos pelo popup...")
+            time.sleep(8)
             
             # Tirar screenshot após clicar no botão Save
             try:
@@ -2296,7 +2162,7 @@ def process_current_novelty():
             yes_clicked = False
             
             # Método 1: Procura por texto exato
-            for text in ["Yes", "YES"]:
+            for text in ["Yes", "YES", "Sim", "SIM"]:
                 try:
                     yes_buttons = driver.find_elements(By.XPATH, f"//button[contains(text(), '{text}')]")
                     for button in yes_buttons:
@@ -2305,14 +2171,14 @@ def process_current_novelty():
                             
                             # Rola até o botão para garantir que esteja visível
                             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
-                            time.sleep(1)
+                            time.sleep(2)
                             
                             # Tenta clicar com JavaScript
                             driver.execute_script("arguments[0].click();", button)
                             logger.info(f"Clicado no botão com texto '{text}' via JavaScript")
                             
                             # Aguarda após clicar
-                            time.sleep(2)
+                            time.sleep(3)
                             
                             yes_clicked = True
                             break
@@ -2322,58 +2188,29 @@ def process_current_novelty():
                     logger.info(f"Não foi possível clicar no botão '{text}': {str(e)}")
                     continue
             
-            # Método 2: Primeiro botão no modal-footer
+            # Método 2: Primeiro botão no modal-footer ou success
             if not yes_clicked:
                 try:
-                    buttons = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal-footer')]/button")
+                    # Procura por botões de sucesso
+                    buttons = driver.find_elements(By.XPATH, "//button[contains(@class, 'btn-success') or contains(@class, 'swal2-confirm')]")
                     if buttons:
-                        logger.info("Encontrado botão no modal-footer, tentando clicar...")
+                        logger.info("Encontrado botão de sucesso, tentando clicar...")
                         
                         # Rola até o botão para garantir que esteja visível
                         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", buttons[0])
-                        time.sleep(1)
+                        time.sleep(2)
                         
                         # Tenta clicar com JavaScript
                         driver.execute_script("arguments[0].click();", buttons[0])
-                        logger.info("Clicado no primeiro botão do modal-footer via JavaScript")
+                        logger.info("Clicado no botão de sucesso via JavaScript")
                         
                         # Aguarda após clicar
-                        time.sleep(2)
+                        time.sleep(3)
                         
                         yes_clicked = True
                 except Exception as e:
-                    logger.info(f"Erro ao clicar no botão do modal-footer: {str(e)}")
+                    logger.info(f"Erro ao clicar no botão de sucesso: {str(e)}")
             
-            # Método 3: Qualquer botão primary ou success
-            if not yes_clicked:
-                try:
-                    buttons = driver.find_elements(By.TAG_NAME, "button")
-                    for button in buttons:
-                        if button.is_displayed():
-                            try:
-                                button_class = button.get_attribute("class").lower()
-                                if "primary" in button_class or "success" in button_class:
-                                    logger.info(f"Encontrado botão com classe {button_class}, tentando clicar...")
-                                    
-                                    # Rola até o botão para garantir que esteja visível
-                                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
-                                    time.sleep(1)
-                                    
-                                    # Tenta clicar com JavaScript
-                                    driver.execute_script("arguments[0].click();", button)
-                                    logger.info(f"Clicado em botão de classe: {button_class} via JavaScript")
-                                    
-                                    # Aguarda após clicar
-                                    time.sleep(2)
-                                    
-                                    yes_clicked = True
-                                    break
-                            except Exception as e:
-                                logger.info(f"Erro ao clicar no botão de classe {button_class}: {str(e)}")
-                                continue
-                except Exception as e:
-                    logger.info(f"Erro ao procurar botões por classe: {str(e)}")
-                    
             if not yes_clicked:
                 logger.warning("Não foi possível clicar em 'Yes'/'Sim'. Tentando continuar...")
             
@@ -2408,9 +2245,9 @@ def process_current_novelty():
                 st.session_state.progress = st.session_state.current_row_index / st.session_state.total_items
                 return False
             
-            # Aguardar mais tempo antes de procurar o formulário
-            logger.info("Aguardando 8 segundos para garantir que o formulário seja carregado...")
-            time.sleep(8)  # Aumentado de 5 para 8 segundos
+            # Aguardar MUITO mais tempo antes de procurar o formulário
+            logger.info("Aguardando 15 segundos para garantir que o formulário seja carregado...")
+            time.sleep(15)  # Aumentado de 8 para 15 segundos
             
             # Tirar screenshot após clicar no botão Yes para diagnóstico
             try:
@@ -2428,133 +2265,62 @@ def process_current_novelty():
             
             # Diagnóstico do DOM atual para depuração
             try:
-                logger.info("Analisando estrutura do DOM após clicar em Yes...")
+                logger.info("=== DIAGNÓSTICO AVANÇADO DO DOM ===")
                 
-                # Verificar se há modais visíveis
-                modals = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal') and @style='display: block;']")
-                logger.info(f"Modais visíveis encontrados: {len(modals)}")
+                # Verifica URL atual
+                current_url = driver.current_url
+                logger.info(f"URL atual: {current_url}")
                 
-                # Verificar todos os formulários na página
+                # Verifica se há modais visíveis
+                modals = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal') and not(contains(@style, 'display: none'))]")
+                logger.info(f"Modais encontrados: {len(modals)}")
+                
+                # Verifica todos os formulários na página
                 forms = driver.find_elements(By.TAG_NAME, "form")
-                logger.info(f"Formulários encontrados: {len(forms)}")
+                visible_forms = [f for f in forms if f.is_displayed()]
+                logger.info(f"Formulários visíveis: {len(visible_forms)}")
                 
-                # Verificar campos de input
+                # Verifica campos de input
                 inputs = driver.find_elements(By.TAG_NAME, "input")
                 visible_inputs = [i for i in inputs if i.is_displayed()]
                 logger.info(f"Campos de input visíveis: {len(visible_inputs)}")
                 
-                # Verificar selects (dropdowns)
+                # Verifica selects (dropdowns)
                 selects = driver.find_elements(By.TAG_NAME, "select")
                 visible_selects = [s for s in selects if s.is_displayed()]
                 logger.info(f"Dropdowns visíveis: {len(visible_selects)}")
                 
-                # Verificar textareas
+                # Verifica textareas
                 textareas = driver.find_elements(By.TAG_NAME, "textarea")
                 visible_textareas = [t for t in textareas if t.is_displayed()]
                 logger.info(f"Textareas visíveis: {len(visible_textareas)}")
                 
-                # Verificar presença específica do dropdown de Solución
-                try:
-                    solution_labels = driver.find_elements(By.XPATH, "//div[contains(text(), 'Solución')]")
-                    if solution_labels:
-                        logger.info(f"Labels de Solución encontradas: {len(solution_labels)}")
-                        
-                        # Verificar se alguma está próxima de um select
-                        for label in solution_labels:
-                            parent = label.find_element(By.XPATH, ".//..")
-                            parent_selects = parent.find_elements(By.TAG_NAME, "select")
-                            if parent_selects:
-                                logger.info("Detectado formulário com dropdown de Solución")
-                                form_modal = parent
-                                form_found = True
-                                break
-                except Exception as e:
-                    logger.info(f"Erro ao verificar dropdown de Solución: {e}")
+                # Verifica iframes
+                iframes = driver.find_elements(By.TAG_NAME, "iframe")
+                logger.info(f"IFrames encontrados: {len(iframes)}")
+                
             except Exception as e:
                 logger.warning(f"Erro ao analisar DOM: {e}")
             
-            # Estratégia 1: Busca pelo modal com formulário (padrão)
-            if not form_found:
-                try:
-                    logger.info("Estratégia 1: Buscando modal com formulário...")
-                    # Aumente o tempo de espera para 10 segundos
-                    form_modal = WebDriverWait(driver, 10).until(
-                        EC.visibility_of_element_located((By.XPATH, "//div[contains(@class, 'modal-body')]//form"))
-                    )
-                    logger.info("Formulário encontrado na modal-body")
-                    form_found = True
-                except Exception as e:
-                    logger.info(f"Estratégia 1 falhou: {e}")
-            
-            # Estratégia 2: Busca qualquer formulário na página
-            if not form_found:
-                try:
-                    logger.info("Estratégia 2: Buscando qualquer formulário...")
-                    forms = driver.find_elements(By.TAG_NAME, "form")
-                    for form in forms:
-                        if form.is_displayed():
-                            form_modal = form
-                            form_found = True
-                            logger.info("Formulário encontrado diretamente")
-                            break
-                except Exception as e:
-                    logger.info(f"Estratégia 2 falhou: {e}")
-            
-            # Estratégia 3: Busca qualquer modal ativo
-            if not form_found:
-                try:
-                    logger.info("Estratégia 3: Buscando qualquer modal ativo...")
-                    modals = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal') and @style='display: block;']")
-                    if modals:
-                        form_modal = modals[0]
-                        form_found = True
-                        logger.info("Modal ativo encontrado, usando como formulário")
-                except Exception as e:
-                    logger.info(f"Estratégia 3 falhou: {e}")
-            
-            # Estratégia 4: Usa o corpo da página como último recurso
-            if not form_found:
-                try:
-                    logger.info("Estratégia 4: Usando corpo da página como último recurso...")
-                    form_modal = driver.find_element(By.TAG_NAME, "body")
-                    form_found = True
-                    logger.info("Usando body como formulário")
-                except Exception as e:
-                    logger.info(f"Estratégia 4 falhou: {e}")
-            
-            # Adicional: Verifica a presença do dropdown específico
+            # Usa o body como formulário (estratégia mais robusta)
             try:
-                dropdown_exists = False
-                selects = driver.find_elements(By.TAG_NAME, "select")
-                for select in selects:
-                    if select.is_displayed():
-                        try:
-                            options = select.find_elements(By.TAG_NAME, "option")
-                            for option in options:
-                                if "entregar en nueva dirección" in option.text.lower():
-                                    logger.info("Detectado dropdown com opção 'Entregar en nueva dirección'")
-                                    dropdown_exists = True
-                                    break
-                        except:
-                            pass
-                    if dropdown_exists:
-                        break
-                        
-                if dropdown_exists:
-                    logger.info("Usando fluxo especial para formulário dropdown")
-                    result = handle_dropdown_solution_form(driver, form_modal, customer_info)
-                elif form_found:
-                    logger.info("Usando fluxo padrão para formulário encontrado")
-                    result = fill_form_fields(driver, form_modal, customer_info)
-                else:
-                    logger.error("Não foi possível encontrar o formulário para preencher. Pulando preenchimento.")
-                    result = False
+                logger.info("Usando BODY como formulário para máxima compatibilidade...")
+                form_modal = driver.find_element(By.TAG_NAME, "body")
+                form_found = True
+                logger.info("Body selecionado como formulário")
+            except Exception as e:
+                logger.error(f"Erro crítico: não foi possível selecionar body: {e}")
+                form_found = False
+            
+            if form_found:
+                logger.info("Iniciando preenchimento do formulário...")
+                result = fill_form_fields(driver, form_modal, customer_info)
                 
-                # ADICIONADO: SEMPRE tenta clicar no botão de salvar, independentemente do resultado anterior
+                # SEMPRE tenta clicar no botão de salvar, independentemente do resultado anterior
                 logger.info("PASSO CRÍTICO: Tentando clicar no botão 'Save Solution'...")
                 try:
                     # Pausa antes de tentar clicar
-                    time.sleep(3)
+                    time.sleep(5)
                     # Chama a função aprimorada de clique
                     save_clicked = click_save_button(driver)
                     if save_clicked:
@@ -2562,11 +2328,11 @@ def process_current_novelty():
                         
                         # NOVA VERIFICAÇÃO: Aguarda e verifica se realmente foi salvo
                         logger.info("Verificando se o formulário foi salvo com sucesso...")
-                        time.sleep(5)  # Aguarda mais tempo para processamento
+                        time.sleep(8)  # Aguarda mais tempo para processamento
                         
                         # Verifica se o modal foi fechado (indicativo de sucesso)
                         try:
-                            modals_after = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal') and @style='display: block;']")
+                            modals_after = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal') and not(contains(@style, 'display: none'))]")
                             if len(modals_after) == 0:
                                 logger.info("✅ Modal fechado - salvamento confirmado")
                             else:
@@ -2588,23 +2354,15 @@ def process_current_novelty():
                         logger.warning("⚠️ Falha ao clicar no botão 'Save Solution'")
                 except Exception as explicit_save_error:
                     logger.error(f"❌ Erro ao executar clique: {explicit_save_error}")
-                    
-            except Exception as e:
-                logger.error(f"Erro ao identificar tipo de formulário: {e}")
+            else:
+                logger.error("Não foi possível encontrar formulário para preencher")
                 result = False
-                
-                # Mesmo com erro, tenta clicar no botão salvar
-                logger.info("Tentando clicar no botão de salvar mesmo após erro...")
-                try:
-                    save_clicked = click_save_button(driver)
-                except Exception as e_save:
-                    logger.error(f"Erro ao tentar clicar no botão salvar após erro: {e_save}")
             
             # CÓDIGO REDIRECIONAMENTO - Verifica o erro específico "Ups, tenemos el siguiente inconveniente"
             logger.info("Verificando se apareceu o erro 'Ups, tenemos el siguiente inconveniente'...")
             try:
                 # Espera um pouco para o popup aparecer
-                time.sleep(3)
+                time.sleep(5)
                 
                 # Procura pelo texto de erro específico
                 error_elements = driver.find_elements(By.XPATH, "//*[contains(text(), 'Ups, tenemos el siguiente inconveniente')]")
@@ -2631,7 +2389,7 @@ def process_current_novelty():
                     driver.get("https://app.dropi.co/dashboard/novelties")
                     
                     # Aguarda o carregamento da página
-                    time.sleep(8)  # Aumentado para 8 segundos
+                    time.sleep(10)  # Aumentado para 10 segundos
                     
                     # Incrementa o índice para pular esta novelty
                     st.session_state.current_row_index += 1
@@ -2645,9 +2403,9 @@ def process_current_novelty():
             except Exception as e:
                 logger.info(f"Erro ao verificar popup de erro específico: {str(e)}")
             
-            # Espera adicional após salvar - AUMENTADO
+            # Espera adicional após salvar - MUITO AUMENTADO
             logger.info("Aguardando processamento adicional...")
-            time.sleep(8)  # Aumentado de 5 para 8 segundos
+            time.sleep(10)  # Aumentado de 8 para 10 segundos
             
             # Procura e clica no popup "OK" que aparece após salvar
             logger.info("Procurando popup de confirmação com botão OK...")
@@ -2663,7 +2421,7 @@ def process_current_novelty():
                 ok_clicked = False
                 
                 # Método 1: Botão com texto OK
-                for text in ["OK", "Ok", "ok", "Aceptar", "Aceptar", "Aceitar", "aceitar"]:
+                for text in ["OK", "Ok", "ok", "Aceptar", "Aceitar", "aceitar"]:
                     try:
                         ok_buttons = driver.find_elements(By.XPATH, f"//button[contains(text(), '{text}')]")
                         for button in ok_buttons:
@@ -2671,47 +2429,29 @@ def process_current_novelty():
                                 logger.info(f"Botão OK encontrado com texto '{text}', clicando...")
                                 driver.execute_script("arguments[0].click();", button)
                                 ok_clicked = True
+                                time.sleep(3)
                                 break
                         if ok_clicked:
                             break
                     except Exception as e:
                         logger.info(f"Erro ao clicar no botão '{text}': {str(e)}")
                 
-                # Método 2: Qualquer botão em um modal visible
+                # Método 2: Qualquer botão em um modal visible ou swal
                 if not ok_clicked:
                     try:
-                        buttons = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal') and @style='display: block;']//button")
+                        buttons = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal') or contains(@class, 'swal')]//button")
                         for button in buttons:
                             if button.is_displayed():
-                                logger.info(f"Botão encontrado em modal visível: '{button.text}', clicando...")
+                                logger.info(f"Botão encontrado em modal/swal: '{button.text}', clicando...")
                                 driver.execute_script("arguments[0].click();", button)
                                 ok_clicked = True
+                                time.sleep(3)
                                 break
                     except Exception as e:
-                        logger.info(f"Erro ao clicar em botão de modal visível: {str(e)}")
-                
-                # Método 3: Qualquer botão de classe primary ou success
-                if not ok_clicked:
-                    try:
-                        buttons = driver.find_elements(By.TAG_NAME, "button")
-                        for button in buttons:
-                            if button.is_displayed():
-                                try:
-                                    button_class = button.get_attribute("class").lower()
-                                    if "primary" in button_class or "success" in button_class:
-                                        logger.info(f"Botão OK encontrado por classe: '{button.text}', clicando...")
-                                        driver.execute_script("arguments[0].click();", button)
-                                        ok_clicked = True
-                                        break
-                                except:
-                                    continue
-                    except Exception as e:
-                        logger.info(f"Erro ao procurar botão OK por classe: {str(e)}")
+                        logger.info(f"Erro ao clicar em botão de modal/swal: {str(e)}")
                 
                 if ok_clicked:
                     logger.info("Botão OK clicado com sucesso")
-                    # Espera adicional após clicar em OK
-                    time.sleep(2)
                 else:
                     logger.warning("Não foi possível encontrar e clicar no botão OK, continuando mesmo assim")
             except Exception as e:
@@ -2726,39 +2466,18 @@ def process_current_novelty():
                 current_url = driver.current_url
                 logger.info(f"URL atual após processamento: {current_url}")
                 
-                if "novelties" in current_url:
-                    logger.info("✅ Confirmado: ainda/voltou para a página de novelties")
-                    
-                    # Verifica se o botão "Solve" ainda está presente na linha processada
-                    try:
-                        # Recarrega as linhas para verificar
-                        fresh_rows = driver.find_elements(By.XPATH, "//table/tbody/tr")
-                        if fresh_rows and st.session_state.current_row_index < len(fresh_rows):
-                            current_row = fresh_rows[st.session_state.current_row_index]
-                            solve_buttons = current_row.find_elements(By.XPATH, ".//button[contains(text(), 'Solve')]")
-                            
-                            if not solve_buttons:
-                                logger.info("✅ Botão 'Solve' não encontrado na linha - indicativo de processamento bem-sucedido")
-                            else:
-                                logger.warning("⚠️ Botão 'Solve' ainda presente - possível falha no salvamento")
-                                # Registra como falha potencial mas continua
-                                st.session_state.failed_items.append({
-                                    "id": row_id, 
-                                    "error": "Botão 'Solve' ainda presente após processamento"
-                                })
-                                st.session_state.failed_count = len(st.session_state.failed_items)
-                    except Exception as solve_check_error:
-                        logger.info(f"Erro ao verificar botão Solve: {solve_check_error}")
-                else:
+                if "novelties" not in current_url:
                     logger.warning(f"⚠️ URL não está na página de novelties: {current_url}")
                     # Tenta navegar de volta
                     driver.get("https://app.dropi.co/dashboard/novelties")
-                    time.sleep(5)
+                    time.sleep(8)
+                else:
+                    logger.info("✅ Confirmado: ainda/voltou para a página de novelties")
                     
             except Exception as final_check_error:
                 logger.warning(f"Erro na verificação final: {final_check_error}")
             
-            # Incrementa contador de sucesso
+            # Incrementa contador de sucesso (assumimos sucesso se chegou até aqui)
             logger.info("Executando verificação final de sucesso...")
             processing_successful = check_novelty_actually_processed(driver, row_id)
             
@@ -2771,7 +2490,7 @@ def process_current_novelty():
                 logger.warning(f"❌ Novelty {row_id} processamento FALHOU na verificação final!")
             
             # Pequena pausa entre processamentos
-            time.sleep(3)
+            time.sleep(5)
             
         except Exception as e:
             # Registra o erro
@@ -2782,7 +2501,10 @@ def process_current_novelty():
             st.session_state.failed_count = len(st.session_state.failed_items)
             
             # Tratamento de erro conforme especificado
-            handle_error(row, row_id)
+            try:
+                handle_error(row, row_id)
+            except:
+                logger.error("Erro no tratamento de erro")
         
         # Incrementa o índice para a próxima novelty
         st.session_state.current_row_index += 1
