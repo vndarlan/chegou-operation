@@ -1208,78 +1208,145 @@ def click_no_yes_buttons(driver):
         return False
 
 def handle_simple_three_field_form(driver, form_modal, customer_info):
-    """Função corrigida para formulário de 3 campos."""
+    """Função agressiva que preenche TODOS os campos visíveis."""
     try:
-        logger.info("Detectado formulário simples de 3 campos - usando tratamento específico...")
+        logger.info("MODO AGRESSIVO: Preenchendo TODOS os campos visíveis...")
         
         try:
-            driver.save_screenshot("before_simple_form_interaction.png")
-            logger.info("Screenshot antes da interação com formulário simples")
+            driver.save_screenshot("before_aggressive_fill.png")
+            logger.info("Screenshot antes do preenchimento agressivo")
         except:
             pass
         
         fields_filled = 0
         
-        # CAMPO 1: Solución (sempre textarea)
-        logger.info("Preenchendo campo 'Solución'...")
-        solucion_filled = fill_field_by_label(driver, form_modal, 
-                                            ["Solución", "Solucion"], 
-                                            customer_info["address"])
-        if solucion_filled:
-            fields_filled += 1
-            logger.info("✅ Campo 'Solución' preenchido com sucesso")
-        else:
-            logger.warning("❌ Não foi possível preencher o campo 'Solución'")
+        # ESTRATÉGIA AGRESSIVA: Pega TODOS os campos editáveis visíveis
+        all_fields = []
         
-        # CAMPO 2: Confirmar dirección destinatario
-        logger.info("Preenchendo campo 'Confirmar dirección destinatario'...")
-        direccion_filled = fill_field_by_label(driver, form_modal, 
-                                             ["Confirmar dirección destinatario", "direccion"], 
-                                             customer_info["address"])
-        if direccion_filled:
-            fields_filled += 1
-            logger.info("✅ Campo 'Confirmar dirección destinatario' preenchido com sucesso")
-        else:
-            logger.warning("❌ Não foi possível preencher o campo 'Confirmar dirección destinatario'")
-        
-        # CAMPO 3: Confirmar celular destinatario
-        logger.info("Preenchendo campo 'Confirmar celular destinatario'...")
-        celular_filled = fill_field_by_label(driver, form_modal, 
-                                           ["Confirmar celular destinatario", "celular"], 
-                                           customer_info["phone"])
-        if celular_filled:
-            fields_filled += 1
-            logger.info("✅ Campo 'Confirmar celular destinatario' preenchido com sucesso")
-        else:
-            logger.warning("❌ Não foi possível preencher o campo 'Confirmar celular destinatario'")
-        
-        # CAMPO EXTRA: Specify Address (se existir)
-        logger.info("Procurando campo 'Specify Address'...")
-        specify_filled = fill_field_by_label(driver, form_modal, 
-                                           ["Specify Address", "specify"], 
-                                           customer_info["address"])
-        if specify_filled:
-            fields_filled += 1
-            logger.info("✅ Campo 'Specify Address' preenchido com sucesso")
-        
+        # Busca textareas
         try:
-            driver.save_screenshot("after_simple_form_filled.png")
-            logger.info("Screenshot após preencher formulário simples")
+            textareas = driver.find_elements(By.TAG_NAME, "textarea")
+            for textarea in textareas:
+                if textarea.is_displayed():
+                    all_fields.append(("textarea", textarea))
         except:
             pass
         
-        logger.info(f"Total de {fields_filled} campos preenchidos no formulário simples")
+        # Busca inputs de texto
+        try:
+            inputs = driver.find_elements(By.TAG_NAME, "input")
+            for input_field in inputs:
+                if input_field.is_displayed():
+                    input_type = input_field.get_attribute("type") or "text"
+                    if input_type.lower() in ["text", "email", "tel", ""]:
+                        all_fields.append(("input", input_field))
+        except:
+            pass
         
-        # Aceita pelo menos 1 campo preenchido (pelo menos o Solución)
+        logger.info(f"Encontrados {len(all_fields)} campos editáveis para preencher")
+        
+        # PREENCHE TODOS OS CAMPOS DE FORMA INTELIGENTE
+        for i, (field_type, field) in enumerate(all_fields):
+            try:
+                # Obtém atributos do campo
+                placeholder = field.get_attribute("placeholder") or ""
+                name = field.get_attribute("name") or ""
+                id_attr = field.get_attribute("id") or ""
+                current_value = field.get_attribute("value") or ""
+                
+                # Pula campo se já tem valor longo (pode ser um campo sistema)
+                if len(current_value) > 50:
+                    logger.info(f"Campo {i} pulado - já tem valor longo: {current_value[:30]}...")
+                    continue
+                
+                # Pula campos de pesquisa
+                if any(search_term in (placeholder + name + id_attr).lower() 
+                       for search_term in ["search", "buscar", "pesquisar"]):
+                    logger.info(f"Campo {i} pulado - campo de pesquisa")
+                    continue
+                
+                # Determina que valor usar baseado nos atributos
+                value_to_use = ""
+                field_description = f"placeholder='{placeholder}', name='{name}', id='{id_attr}'"
+                
+                # LÓGICA INTELIGENTE DE PREENCHIMENTO:
+                
+                # 1. Campos relacionados a endereço/solução
+                if any(addr_term in (placeholder + name + id_attr).lower() 
+                       for addr_term in ["solucion", "solution", "direccion", "direction", "address", "endereco", "specify"]):
+                    value_to_use = customer_info["address"]
+                    logger.info(f"Campo {i} identificado como ENDEREÇO: {field_description}")
+                
+                # 2. Campos relacionados a telefone
+                elif any(phone_term in (placeholder + name + id_attr).lower() 
+                         for phone_term in ["celular", "telefono", "phone", "tel"]):
+                    value_to_use = customer_info["phone"]
+                    logger.info(f"Campo {i} identificado como TELEFONE: {field_description}")
+                
+                # 3. Campos relacionados a nome
+                elif any(name_term in (placeholder + name + id_attr).lower() 
+                         for name_term in ["nombre", "name", "cliente", "client"]):
+                    value_to_use = customer_info["name"]
+                    logger.info(f"Campo {i} identificado como NOME: {field_description}")
+                
+                # 4. Campos genéricos vazios - usa endereço como padrão
+                elif len(current_value.strip()) == 0:
+                    value_to_use = customer_info["address"]
+                    logger.info(f"Campo {i} GENÉRICO vazio - preenchendo com endereço: {field_description}")
+                
+                # PREENCHE O CAMPO se temos um valor
+                if value_to_use:
+                    try:
+                        # Rola até o campo
+                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", field)
+                        time.sleep(0.3)
+                        
+                        # Limpa e preenche
+                        driver.execute_script("arguments[0].value = '';", field)
+                        time.sleep(0.3)
+                        safe_value = value_to_use.replace("'", "\\'").replace('"', '\\"')
+                        driver.execute_script(f"arguments[0].value = '{safe_value}';", field)
+                        
+                        # Dispara eventos
+                        events = ["input", "change", "blur", "keyup"]
+                        for event in events:
+                            driver.execute_script(f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));", field)
+                        
+                        # Verifica se foi preenchido
+                        new_value = field.get_attribute("value")
+                        if new_value and len(new_value) > 10:
+                            fields_filled += 1
+                            logger.info(f"✅ Campo {i} preenchido com sucesso: {new_value[:50]}...")
+                        else:
+                            logger.warning(f"⚠️ Campo {i} não aceitou o valor")
+                            
+                    except Exception as fill_error:
+                        logger.warning(f"Erro ao preencher campo {i}: {fill_error}")
+                
+                else:
+                    logger.info(f"Campo {i} ignorado - sem valor adequado: {field_description}")
+                    
+            except Exception as field_error:
+                logger.warning(f"Erro ao processar campo {i}: {field_error}")
+        
+        try:
+            driver.save_screenshot("after_aggressive_fill.png")
+            logger.info("Screenshot após preenchimento agressivo")
+        except:
+            pass
+        
+        logger.info(f"RESULTADO AGRESSIVO: {fields_filled} campos preenchidos de {len(all_fields)} encontrados")
+        
+        # Aceita qualquer preenchimento (mesmo que seja só 1 campo)
         if fields_filled >= 1:
-            logger.info("✅ Formulário considerado preenchido com sucesso (1+ campos)")
+            logger.info("✅ Preenchimento agressivo bem-sucedido")
             return True
         else:
-            logger.warning("❌ Formulário não foi preenchido adequadamente (0 campos)")
+            logger.warning("❌ Nenhum campo foi preenchido")
             return False
             
     except Exception as e:
-        logger.error(f"Erro ao processar formulário simples de 3 campos: {str(e)}")
+        logger.error(f"Erro no preenchimento agressivo: {str(e)}")
         return False
 
 def fill_form_fields(driver, form_modal, customer_info):
@@ -1904,6 +1971,68 @@ def verify_processing_success(driver, row_id):
             
     except Exception as e:
         logger.error(f"Erro ao verificar sucesso do processamento: {e}")
+        return False
+
+def check_novelty_actually_processed(driver, row_id):
+    """Verifica de forma mais robusta se a novelty foi processada."""
+    try:
+        logger.info(f"Verificação robusta para novelty {row_id}...")
+        
+        # Aguarda mais tempo
+        time.sleep(5)
+        
+        # Força recarregamento da página
+        logger.info("Forçando recarregamento da página...")
+        driver.refresh()
+        time.sleep(8)
+        
+        # Verifica se voltou para novelties
+        current_url = driver.current_url
+        if "novelties" not in current_url:
+            logger.info("Redirecionando para novelties...")
+            driver.get("https://app.dropi.co/dashboard/novelties")
+            time.sleep(8)
+        
+        # Procura pela linha específica na tabela
+        try:
+            # Busca mais robusta pela linha
+            row_selectors = [
+                f"//td[contains(text(), '{row_id}')]/parent::tr",
+                f"//tr[contains(., '{row_id}')]",
+                f"//*[contains(text(), '{row_id}')]/ancestor::tr"
+            ]
+            
+            specific_row = None
+            for selector in row_selectors:
+                try:
+                    rows = driver.find_elements(By.XPATH, selector)
+                    if rows and rows[0].is_displayed():
+                        specific_row = rows[0]
+                        logger.info(f"Linha encontrada usando selector: {selector}")
+                        break
+                except:
+                    continue
+            
+            if specific_row:
+                # Verifica se ainda há botão "Solve"
+                solve_buttons = specific_row.find_elements(By.XPATH, ".//button[contains(text(), 'Solve') or contains(@class, 'btn-success')]")
+                
+                if not solve_buttons:
+                    logger.info("✅ SUCESSO CONFIRMADO - Botão 'Solve' removido da linha")
+                    return True
+                else:
+                    logger.warning("❌ FALHA CONFIRMADA - Botão 'Solve' ainda presente")
+                    return False
+            else:
+                logger.warning("❌ Não foi possível encontrar a linha na tabela")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Erro ao verificar linha específica: {e}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Erro na verificação robusta: {e}")
         return False
 
 def process_current_novelty():
@@ -2592,7 +2721,7 @@ def process_current_novelty():
             
             # Incrementa contador de sucesso
             logger.info("Executando verificação final de sucesso...")
-            processing_successful = verify_processing_success(driver, row_id)
+            processing_successful = check_novelty_actually_processed(driver, row_id)
             
             if processing_successful:
                 st.session_state.success_count += 1
